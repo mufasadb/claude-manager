@@ -1,0 +1,71 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'Validating command safety...' && if echo '$CLAUDE_TOOL_INPUT' | grep -E '(rm -rf|sudo rm|chmod 777|> /etc/)' > /dev/null; then echo 'Dangerous command blocked!' && exit 1; fi"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'Checking for API keys...' && if grep -r 'sk-[a-zA-Z0-9]\\{48\\}' $CLAUDE_FILE_PATHS > /dev/null 2>&1; then echo 'API key detected - review before commit!' && exit 1; fi"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'Auto-formatting code...' && for file in $CLAUDE_FILE_PATHS; do if [[ '$file' == *.py ]]; then black '$file' && isort '$file'; elif [[ '$file' == *.js || '$file' == *.ts ]]; then npx prettier --write '$file'; elif [[ '$file' == *.go ]]; then gofmt -w '$file'; fi; done"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'Auto-adding to git...' && git add $CLAUDE_FILE_PATHS && echo 'Files staged for commit'"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "osascript -e 'display notification \"Claude has completed the task!\" with title \"Claude Code\" sound name \"Purr\"'"
+          }
+        ]
+      }
+    ]
+  },
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx @modelcontextprotocol/server-filesystem",
+      "args": ["/path/to/your/project"]
+    },
+    "git": {
+      "command": "npx @modelcontextprotocol/server-git"
+    },
+    "fetch": {
+      "command": "npx @modelcontextprotocol/server-fetch"
+    }
+  },
+  "anthropic": {
+    "model": "claude-sonnet-4",
+    "max_tokens": 8192
+  }
+}

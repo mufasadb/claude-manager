@@ -1,0 +1,33 @@
+{
+  "enabled": true,
+  "billingPeriodStart": "2025-01-01",
+  "planType": "pro",
+  "sessions": [
+    {
+      "event": "session_start",
+      "timestamp": 1704967200,
+      "project": "/Users/username/projects/my-awesome-app",
+      "date": "2025-01-11T12:00:00.000Z",
+      "sessionId": "session_1704967200"
+    },
+    {
+      "event": "session_start",
+      "timestamp": 1704985200,
+      "project": "/Users/username/projects/python-app",
+      "date": "2025-01-11T17:00:00.000Z",
+      "sessionId": "session_1704985200"
+    },
+    {
+      "event": "session_start",
+      "timestamp": 1705003200,
+      "project": "/Users/username/projects/rust-cli",
+      "date": "2025-01-11T22:00:00.000Z",
+      "sessionId": "session_1705003200"
+    }
+  ],
+  "currentMonth": {
+    "sessionsCount": 15,
+    "totalDuration": 54000,
+    "activeSessions": 1
+  }
+}

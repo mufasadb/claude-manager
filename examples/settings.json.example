@@ -1,0 +1,23 @@
+{
+  "sessionTracking": {
+    "enabled": true,
+    "planType": "pro",
+    "billingPeriodStart": "2025-01-01"
+  },
+  "preferences": {
+    "theme": "dark",
+    "notifications": true,
+    "autoRefresh": true,
+    "refreshInterval": 5000
+  },
+  "dashboard": {
+    "defaultView": "overview",
+    "showProjectPaths": true,
+    "compactMode": false
+  },
+  "integrations": {
+    "webhookUrl": "",
+    "slackNotifications": false,
+    "emailAlerts": false
+  }
+}

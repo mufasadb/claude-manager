@@ -1,0 +1,2302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claude Manager Dashboard</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="apple-touch-icon" href="/favicon.svg">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #e5e7eb;
+            line-height: 1.6;
+        }
+
+        .header {
+            background: #111827;
+            color: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .session-status {
+            background: #1f2937;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            border: 1px solid #374151;
+        }
+
+        .header-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .header-toggle .toggle-switch {
+            width: 50px;
+            height: 28px;
+        }
+
+        .header-toggle .toggle-slider:before {
+            height: 20px;
+            width: 20px;
+            left: 4px;
+            bottom: 4px;
+        }
+
+        .header-toggle input:checked + .toggle-slider:before {
+            transform: translateX(22px);
+        }
+
+        .settings-cog {
+            background: #374151;
+            border: 1px solid #4b5563;
+            border-radius: 6px;
+            color: white;
+            cursor: pointer;
+            padding: 0.5rem;
+            font-size: 1.125rem;
+            transition: all 0.2s ease;
+        }
+
+        .settings-cog:hover {
+            background: #4b5563;
+            transform: rotate(90deg);
+        }
+
+        .settings-panel {
+            position: fixed;
+            top: 0;
+            right: -400px;
+            width: 400px;
+            height: 100vh;
+            background: #1f2937;
+            border-left: 1px solid #374151;
+            transition: right 0.3s ease;
+            z-index: 1000;
+            overflow-y: auto;
+        }
+
+        .settings-panel.open {
+            right: 0;
+        }
+
+        .settings-header {
+            background: #111827;
+            padding: 1rem;
+            border-bottom: 1px solid #374151;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .settings-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0.25rem;
+        }
+
+        .settings-content {
+            padding: 1rem;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-online { background: #10b981; }
+        .status-offline { background: #ef4444; }
+        .status-warning { background: #f59e0b; }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .sections {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .card {
+            background: #374151;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            border: 1px solid #4b5563;
+        }
+
+        .card h2 {
+            font-size: 1.25rem;
+            margin-bottom: 1rem;
+            color: #f9fafb;
+        }
+
+        .config-section {
+            margin-bottom: 1rem;
+        }
+
+        .config-section h3 {
+            font-size: 1rem;
+            color: #d1d5db;
+            margin-bottom: 0.5rem;
+        }
+
+        .config-file {
+            background: #1f2937;
+            border: 1px solid #374151;
+            border-radius: 4px;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 0.875rem;
+            position: relative;
+        }
+
+        .config-content.collapsible {
+            max-height: 200px;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+
+        .config-content.expanded {
+            max-height: none;
+        }
+
+        .config-container {
+            position: relative;
+        }
+
+        .collapse-toggle {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+            cursor: pointer;
+            z-index: 10;
+        }
+
+        .collapse-toggle:hover {
+            background: #2563eb;
+        }
+
+        .edit-toggle {
+            position: absolute;
+            top: 0.5rem;
+            right: 4rem;
+            background: #10b981;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+            cursor: pointer;
+            z-index: 10;
+        }
+
+        .edit-toggle:hover {
+            background: #059669;
+        }
+
+        .json-editor, .markdown-editor {
+            width: 100%;
+            min-height: 200px;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 0.875rem;
+            padding: 0.75rem;
+            border: 1px solid #4b5563;
+            border-radius: 4px;
+            background: #1f2937;
+            color: #e5e7eb;
+            resize: vertical;
+        }
+
+        .editor-controls {
+            margin-top: 0.5rem;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .btn-small {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .btn-small:hover {
+            background: #2563eb;
+        }
+
+        .btn-small.secondary {
+            background: #6b7280;
+        }
+
+        .btn-small.secondary:hover {
+            background: #4b5563;
+        }
+
+        .markdown-preview {
+            background: #1f2937;
+            border: 1px solid #4b5563;
+            border-radius: 4px;
+            padding: 0.75rem;
+            margin-top: 0.5rem;
+            color: #e5e7eb;
+        }
+
+        .markdown-preview h1, .markdown-preview h2, .markdown-preview h3 {
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        .markdown-preview h1 { font-size: 1.5rem; }
+        .markdown-preview h2 { font-size: 1.25rem; }
+        .markdown-preview h3 { font-size: 1.125rem; }
+
+        .markdown-preview code {
+            background: #f3f4f6;
+            padding: 0.125rem 0.25rem;
+            border-radius: 3px;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 0.875rem;
+        }
+
+        .markdown-preview pre {
+            background: #111827;
+            padding: 0.75rem;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin: 0.5rem 0;
+        }
+
+        .markdown-preview pre code {
+            background: none;
+            padding: 0;
+        }
+
+        .json-syntax {
+            white-space: pre-wrap;
+        }
+
+        .json-key { color: #059669; font-weight: 600; }
+        .json-string { color: #dc2626; }
+        .json-number { color: #2563eb; }
+        .json-boolean { color: #7c3aed; }
+        .json-null { color: #6b7280; }
+
+        .config-file.error {
+            background: #fef2f2;
+            border-color: #fecaca;
+            color: #991b1b;
+        }
+
+        .add-form {
+            background: #1f2937;
+            border: 2px dashed #4b5563;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            align-items: end;
+        }
+
+        .form-group {
+            flex: 1;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #d1d5db;
+            margin-bottom: 0.25rem;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #4b5563;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            background: #374151;
+            color: #e5e7eb;
+        }
+
+        .btn {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+
+        .btn:hover {
+            background: #2563eb;
+        }
+
+        .env-suggestions {
+            margin-top: 0.5rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem;
+        }
+
+        .suggestion-btn {
+            background: #374151;
+            color: #d1d5db;
+            border: 1px solid #4b5563;
+            padding: 0.25rem 0.5rem;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            transition: all 0.2s ease;
+        }
+
+        .suggestion-btn:hover {
+            background: #4b5563;
+            color: #f3f4f6;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .scope-section {
+            margin-bottom: 2rem;
+            border: 1px solid #4b5563;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .scope-header {
+            background: #2d3748;
+            padding: 1rem;
+            border-bottom: 1px solid #4b5563;
+            font-weight: 600;
+            color: #f9fafb;
+        }
+
+        .scope-content {
+            padding: 1.5rem;
+            background: #374151;
+        }
+
+        .mcp-server {
+            padding: 0.75rem;
+            background: #1f2937;
+            border-radius: 4px;
+            margin-bottom: 0.5rem;
+        }
+
+        .mcp-name {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+            color: #f9fafb;
+        }
+
+        .mcp-details {
+            font-size: 0.875rem;
+            color: #d1d5db;
+        }
+
+        .refresh-button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            margin-bottom: 1rem;
+        }
+
+        .refresh-button:hover {
+            background: #2563eb;
+        }
+
+        .last-update {
+            font-size: 0.75rem;
+            color: #6b7280;
+            text-align: right;
+            margin-top: 1rem;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #9ca3af;
+            font-style: italic;
+            padding: 2rem;
+        }
+
+
+        /* Environment Variables Styles */
+        .env-var {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.5rem 0.75rem;
+            background: #1f2937;
+            border-radius: 4px;
+            margin-bottom: 0.25rem;
+            border: 1px solid #374151;
+            min-height: 2.5rem;
+        }
+
+        .env-var-info {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .env-var-name {
+            font-weight: 600;
+            color: #f9fafb;
+            min-width: 150px;
+        }
+
+        .env-var-value {
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 0.875rem;
+            color: #9ca3af;
+        }
+
+        .env-var-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .btn-small-env {
+            background: #6b7280;
+            color: white;
+            border: none;
+            padding: 0.25rem 0.5rem;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.75rem;
+        }
+
+        .btn-small-env:hover {
+            background: #4b5563;
+        }
+
+        .btn-small-env.danger {
+            background: #ef4444;
+        }
+
+        .btn-small-env.danger:hover {
+            background: #dc2626;
+        }
+
+        .btn-small-env.success {
+            background: #10b981;
+        }
+
+        .btn-small-env.success:hover {
+            background: #059669;
+        }
+
+        .project-env-section {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: #111827;
+            border-radius: 4px;
+            border: 1px solid #374151;
+        }
+
+        .project-env-header {
+            font-weight: 600;
+            color: #f9fafb;
+            margin-bottom: 0.5rem;
+        }
+
+        .env-var.project-only {
+            background: #1e3a8a;
+            border-color: #3b82f6;
+        }
+
+        /* Alternating project colors */
+        .scope-section:nth-child(odd) .scope-content {
+            background: #374151;
+        }
+
+        .scope-section:nth-child(even) .scope-content {
+            background: #4b5563;
+        }
+
+        /* Session Tracking Styles */
+        .session-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+
+        .stat-card {
+            background: #1f2937;
+            border: 1px solid #374151;
+            border-radius: 4px;
+            padding: 1rem;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #f9fafb;
+            margin-bottom: 0.25rem;
+        }
+
+        .stat-label {
+            font-size: 0.875rem;
+            color: #9ca3af;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #374151;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 0.5rem;
+        }
+
+        .progress-fill {
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+
+        .progress-safe { background: #10b981; }
+        .progress-warning { background: #f59e0b; }
+        .progress-danger { background: #ef4444; }
+
+        .session-warning {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            color: #92400e;
+            padding: 0.75rem;
+            border-radius: 4px;
+            margin: 1rem 0;
+        }
+
+        .session-danger {
+            background: #fee2e2;
+            border: 1px solid #ef4444;
+            color: #991b1b;
+            padding: 0.75rem;
+            border-radius: 4px;
+            margin: 1rem 0;
+        }
+
+        /* Modern Toggle Switch */
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #374151;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .toggle-slider {
+            background-color: #10b981;
+        }
+
+        input:checked + .toggle-slider:before {
+            transform: translateX(26px);
+        }
+
+        .toggle-label {
+            font-weight: 500;
+            color: #f9fafb;
+        }
+
+        /* Modern Button Styling */
+        .btn-modern {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);
+        }
+
+        .btn-modern:hover {
+            background: linear-gradient(135deg, #dc2626, #b91c1c);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-modern:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>
+            <svg width="24" height="24" viewBox="0 0 32 32" style="margin-right: 0.5rem; vertical-align: middle;">
+                <defs>
+                    <linearGradient id="headerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#60a5fa;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:1" />
+                    </linearGradient>
+                </defs>
+                <circle cx="16" cy="16" r="15" fill="url(#headerGrad)" stroke="#2563eb" stroke-width="1"/>
+                <rect x="6" y="6" width="7" height="7" rx="1" fill="white" opacity="0.9"/>
+                <rect x="19" y="6" width="7" height="4" rx="1" fill="white" opacity="0.7"/>
+                <rect x="6" y="19" width="7" height="7" rx="1" fill="white" opacity="0.7"/>
+                <rect x="19" y="16" width="7" height="10" rx="1" fill="white" opacity="0.9"/>
+                <circle cx="9" cy="9" r="1" fill="#3b82f6"/>
+                <circle cx="22" cy="8" r="0.8" fill="#10b981"/>
+                <circle cx="22" cy="19" r="1" fill="#f59e0b"/>
+            </svg>
+            <span class="status-indicator status-online" id="headerConnectionStatus"></span>
+            Claude Manager Dashboard
+        </h1>
+        <div class="header-controls">
+            <div id="sessionStatusHeader" class="session-status" style="display: none;">
+                Session ends in <span id="sessionTimeRemaining">--</span>
+            </div>
+            <div class="header-toggle">
+                <span>Session Tracking</span>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="headerSessionTrackingEnabled" onchange="toggleSessionTracking()" />
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            <button class="settings-cog" onclick="toggleSettingsPanel()" title="Session Settings">
+                ⚙️
+            </button>
+        </div>
+    </div>
+
+    <!-- Settings Panel -->
+    <div class="settings-panel" id="settingsPanel">
+        <div class="settings-header">
+            <h3>Session Tracking Settings</h3>
+            <button class="settings-close" onclick="toggleSettingsPanel()">×</button>
+        </div>
+        <div class="settings-content">
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label>Plan Type</label>
+                <select id="planType" onchange="updateSessionConfig()" style="width: 100%; padding: 0.5rem; border-radius: 4px; border: 1px solid #4b5563; background: #374151; color: #e5e7eb;">
+                    <option value="pro">Pro ($20/month - 45 messages/5h)</option>
+                    <option value="max-5x">Max 5x ($100/month - 225 messages/5h)</option>
+                    <option value="max-20x">Max 20x ($200/month - 900 messages/5h)</option>
+                </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label>Billing Period Start</label>
+                <input type="date" id="billingPeriodStart" onchange="updateSessionConfig()" style="width: 100%; padding: 0.5rem; border-radius: 4px; border: 1px solid #4b5563; background: #374151; color: #e5e7eb;" />
+            </div>
+            <div id="sessionStats" class="config-file">Loading...</div>
+            <div style="margin-top: 1rem;">
+                <button class="btn-modern" onclick="clearSessionData()">🗑️ Clear Session Data</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <button class="refresh-button" onclick="refreshData()">🔄 Refresh All Data</button>
+
+        <div class="sections">
+            <!-- Project Registration Instructions -->
+            <div class="scope-section">
+                <div class="scope-header">📋 Register New Projects</div>
+                <div class="scope-content">
+                    <div class="config-section">
+                        <h3>How to Register a Project</h3>
+                        <div class="config-file">
+                            <div style="padding: 1rem; background: #111827; border-radius: 4px; font-family: 'SF Mono', Monaco, monospace;">
+                                <div style="color: #10b981; margin-bottom: 0.5rem;">Navigate to any project directory and run:</div>
+                                <div style="color: #e5e7eb; margin-bottom: 1rem;">
+                                    <span style="color: #6b7280;">$</span> <span style="color: #3b82f6;">cd</span> /path/to/your/project<br>
+                                    <span style="color: #6b7280;">$</span> <span style="color: #f59e0b;">cm-reg</span>                      <span style="color: #6b7280;"># Register with directory name</span><br>
+                                    <span style="color: #6b7280;">$</span> <span style="color: #f59e0b;">cm-reg</span> my-custom-name       <span style="color: #6b7280;"># Register with custom name</span>
+                                </div>
+                                <div style="color: #10b981; margin-bottom: 0.5rem;">Setup (one-time installation):</div>
+                                <div style="color: #e5e7eb;">
+                                    <span style="color: #6b7280;">$</span> <span style="color: #3b82f6;">cd</span> ~/Code/claude-manager<br>
+                                    <span style="color: #6b7280;">$</span> <span style="color: #f59e0b;">./install.sh</span>                <span style="color: #6b7280;"># Installs cm-reg command globally</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- User Level Configuration -->
+            <div class="scope-section">
+                <div class="scope-header">User Level (~/.claude/)</div>
+                <div class="scope-content">
+                    <div class="config-section">
+                        <h3>Settings (settings.json)</h3>
+                        <div id="userSettings" class="config-file">Loading...</div>
+                    </div>
+                    <div class="config-section">
+                        <h3>Memory (CLAUDE.md)</h3>
+                        <div id="userMemory" class="config-file">Loading...</div>
+                    </div>
+                    <div class="config-section">
+                        <h3>Hooks</h3>
+                        <div id="userHooks" class="config-file">Loading...</div>
+                        <div class="add-form">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Event</label>
+                                    <select id="hookEvent" onchange="onHookEventChange()">
+                                        <option value="PreToolUse">PreToolUse</option>
+                                        <option value="PostToolUse">PostToolUse</option>
+                                        <option value="Notification">Notification</option>
+                                        <option value="Stop">Stop</option>
+                                        <option value="SubagentStop">SubagentStop</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Preset (or Custom)</label>
+                                    <select id="hookPreset" onchange="onHookPresetChange()">
+                                        <option value="">Custom Hook</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Tool Pattern</label>
+                                    <input type="text" id="hookPattern" placeholder="*" />
+                                </div>
+                                <div class="form-group">
+                                    <label>Command</label>
+                                    <textarea id="hookCommand" placeholder="echo 'Hook triggered'" rows="3" style="width: 100%; font-family: monospace; font-size: 0.875rem; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;"></textarea>
+                                </div>
+                                <button class="btn" onclick="addHook()">Add Hook</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Environment Variables -->
+            <div class="scope-section">
+                <div class="scope-header">Environment Variables</div>
+                <div class="scope-content">
+                    <div class="config-section">
+                        <h3>User Level Environment Variables</h3>
+                        <div class="add-form">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Variable Name</label>
+                                    <input type="text" id="envKey" placeholder="API_KEY" oninput="updateEnvInputType()" />
+                                    <div class="env-suggestions">
+                                        <button type="button" class="suggestion-btn" onclick="setEnvVar('OLLAMA_URL', 'http://localhost:11434')">OLLAMA_URL</button>
+                                        <button type="button" class="suggestion-btn" onclick="setEnvVar('NEO4J_URL', 'bolt://localhost:7687')">NEO4J_URL</button>
+                                        <button type="button" class="suggestion-btn" onclick="setEnvVar('TTS_URL', 'http://localhost:8003')">TTS_URL</button>
+                                        <button type="button" class="suggestion-btn" onclick="setEnvVar('STT_URL', 'http://localhost:8080')">STT_URL</button>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Value</label>
+                                    <input type="text" id="envValue" placeholder="your-secret-value" />
+                                </div>
+                                <button class="btn" onclick="addUserEnvVar()">Add Variable</button>
+                            </div>
+                        </div>
+                        <div id="userEnvVars">Loading...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MCP Servers -->
+            <div class="scope-section">
+                <div class="scope-header">MCP Servers</div>
+                <div class="scope-content">
+                    <div class="add-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Template</label>
+                                <select id="mcpTemplate" onchange="onTemplateChange()">
+                                    <option value="">Custom</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Server Name</label>
+                                <input type="text" id="mcpName" placeholder="my-server" />
+                            </div>
+                            <div class="form-group">
+                                <label>Command</label>
+                                <input type="text" id="mcpCommand" placeholder="node server.js" />
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Scope</label>
+                                <select id="mcpScope">
+                                    <option value="local">Local (default - project-specific, private)</option>
+                                    <option value="user">User (personal utilities, cross-project)</option>
+                                    <option value="project">Project (team-shared, version controlled)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Project (for project scope)</label>
+                                <select id="mcpProject">
+                                    <option value="">Select project...</option>
+                                </select>
+                            </div>
+                            <button class="btn" onclick="addMcpServer()">Add MCP Server</button>
+                        </div>
+                    </div>
+                    <div id="mcpServers">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Project Configurations -->
+            <div id="projectConfigs"></div>
+        </div>
+
+        <div class="last-update">
+            Last updated: <span id="lastUpdate">-</span>
+        </div>
+    </div>
+
+    <script>
+        let ws;
+        let data = {};
+
+        function connect() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${window.location.host}`);
+
+            ws.onopen = function() {
+                updateConnectionStatus(true);
+            };
+
+            ws.onmessage = function(event) {
+                const message = JSON.parse(event.data);
+                if (message.type === 'init') {
+                    data = message.data;
+                    updateUI();
+                } else if (message.type === 'fileChange') {
+                    refreshData();
+                }
+            };
+
+            ws.onclose = function() {
+                updateConnectionStatus(false);
+                setTimeout(connect, 3000);
+            };
+
+            ws.onerror = function() {
+                updateConnectionStatus(false);
+            };
+        }
+
+        function updateConnectionStatus(connected) {
+            const headerIndicator = document.getElementById('headerConnectionStatus');
+            
+            if (connected) {
+                headerIndicator.className = 'status-indicator status-online';
+            } else {
+                headerIndicator.className = 'status-indicator status-offline';
+            }
+        }
+
+        async function refreshData() {
+            try {
+                const response = await fetch('/api/status');
+                data = await response.json();
+                updateUI();
+            } catch (error) {
+                console.error('Failed to refresh data:', error);
+            }
+        }
+
+        function updateUI() {
+            updateUserConfig();
+            updateUserHooks();
+            updateSessionTracking();
+            updateUserEnvVars();
+            updateMcpServers();
+            updateProjectConfigs();
+            updateProjectsList();
+            updateLastUpdate();
+        }
+
+        function updateUserConfig() {
+            const userSettings = document.getElementById('userSettings');
+            const userMemory = document.getElementById('userMemory');
+
+            if (data.userConfig?.settings) {
+                if (data.userConfig.settings.error) {
+                    userSettings.className = 'config-file error';
+                    userSettings.innerHTML = `Error: ${data.userConfig.settings.error}`;
+                } else {
+                    userSettings.className = 'config-file collapsible';
+                    userSettings.innerHTML = createConfigDisplay(
+                        JSON.stringify(data.userConfig.settings, null, 2),
+                        'json',
+                        '~/.claude/settings.json'
+                    );
+                }
+            } else {
+                userSettings.className = 'config-file';
+                userSettings.innerHTML = createConfigDisplay(
+                    'No settings file found',
+                    'json',
+                    '~/.claude/settings.json',
+                    true
+                );
+            }
+
+            if (data.userConfig?.memory) {
+                if (data.userConfig.memory.error) {
+                    userMemory.className = 'config-file error';
+                    userMemory.innerHTML = `Error: ${data.userConfig.memory.error}`;
+                } else {
+                    userMemory.className = 'config-file collapsible';
+                    userMemory.innerHTML = createConfigDisplay(
+                        data.userConfig.memory,
+                        'markdown',
+                        '~/.claude/CLAUDE.md'
+                    );
+                }
+            } else {
+                userMemory.className = 'config-file';
+                userMemory.innerHTML = createConfigDisplay(
+                    'No memory file found',
+                    'markdown',
+                    '~/.claude/CLAUDE.md',
+                    true
+                );
+            }
+        }
+
+        function updateMcpServers() {
+            const container = document.getElementById('mcpServers');
+            
+            if (data.mcpServers?.error) {
+                container.innerHTML = `<div class="config-file error">Error: ${data.mcpServers.error}</div>`;
+                return;
+            }
+
+            if (!data.mcpServers || Object.keys(data.mcpServers).length === 0) {
+                container.innerHTML = '<div class="empty-state">No MCP servers configured</div>';
+                return;
+            }
+
+            if (data.mcpServers.info) {
+                container.innerHTML = `<div class="config-file">${data.mcpServers.info}</div>`;
+                return;
+            }
+
+            const html = Object.entries(data.mcpServers).map(([name, config]) => {
+                const configJson = typeof config === 'string' ? config : JSON.stringify(config, null, 2);
+                return `
+                    <div class="mcp-server">
+                        <div class="mcp-name">${name}</div>
+                        <div class="mcp-details config-file">
+                            ${createConfigDisplay(configJson, typeof config === 'string' ? 'text' : 'json', '', false)}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = html;
+        }
+
+        function updateUserHooks() {
+            const container = document.getElementById('userHooks');
+            
+            if (data.userConfig?.settings?.hooks) {
+                container.className = 'config-file collapsible';
+                const hooksJson = JSON.stringify(data.userConfig.settings.hooks, null, 2);
+                container.innerHTML = createConfigDisplay(
+                    hooksJson,
+                    'json',
+                    '~/.claude/settings.json'
+                );
+            } else {
+                container.className = 'config-file';
+                container.innerHTML = createConfigDisplay(
+                    'No hooks configured',
+                    'json',
+                    '~/.claude/settings.json',
+                    true
+                );
+            }
+        }
+
+        function updateProjectConfigs() {
+            const container = document.getElementById('projectConfigs');
+            
+            if (!data.projects || Object.keys(data.projects).length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            const html = Object.entries(data.projects).map(([name, project]) => {
+                if (!project.config) return '';
+
+                const configSections = Object.entries(project.config).map(([type, content]) => {
+                    let displayContent;
+                    let className = 'config-file';
+                    let fileType = 'text';
+                    let filePath = '';
+
+                    // Determine file type and path
+                    if (type === 'memory') {
+                        fileType = 'markdown';
+                        filePath = `${project.path}/CLAUDE.md`;
+                    } else if (type === 'settings' || type === 'settingsLocal') {
+                        fileType = 'json';
+                        filePath = type === 'settings' ? 
+                            `${project.path}/.claude/settings.json` : 
+                            `${project.path}/.claude/settings.local.json`;
+                    }
+
+                    if (content?.error) {
+                        className += ' error';
+                        displayContent = `Error: ${content.error}`;
+                    } else if (typeof content === 'string') {
+                        className += ' collapsible';
+                        displayContent = createConfigDisplay(content, fileType, filePath);
+                    } else {
+                        className += ' collapsible';
+                        const prettyJson = JSON.stringify(content, null, 2);
+                        displayContent = createConfigDisplay(prettyJson, fileType, filePath);
+                    }
+
+                    return `
+                        <div class="config-section">
+                            <h3>${type}</h3>
+                            <div class="${className}">${displayContent}</div>
+                        </div>
+                    `;
+                }).join('');
+
+                // Add environment variables section
+                const projectEnvVars = data.projectEnvVars?.[name] || {};
+                const userEnvVars = data.userEnvVars || {};
+                
+                let envSection = '';
+                if (Object.keys(projectEnvVars).length > 0 || Object.keys(userEnvVars).length > 0) {
+                    const envHtml = Object.entries(projectEnvVars).map(([key, value]) => {
+                        const isUserLevel = key in userEnvVars;
+                        const className = isUserLevel ? 'env-var' : 'env-var project-only';
+                        const label = isUserLevel ? '(User + Project)' : '(Project Only)';
+                        
+                        return `
+                            <div class="${className}">
+                                <div class="env-var-info">
+                                    <div class="env-var-name">${escapeHtml(key)} ${label}</div>
+                                    <div class="env-var-value">***** (hidden for security)</div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                    
+                    envSection = `
+                        <div class="config-section">
+                            <h3>Environment Variables</h3>
+                            <div class="project-env-section">
+                                ${envHtml || '<div class="empty-state">No environment variables in this project</div>'}
+                            </div>
+                        </div>
+                    `;
+                }
+
+                return `
+                    <div class="scope-section">
+                        <div class="scope-header" style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>Project: ${name} (${project.path})</span>
+                            <button class="btn-small-env danger" onclick="unregisterProject('${escapeHtml(name)}')" title="Unregister this project">
+                                🗑️ Unregister
+                            </button>
+                        </div>
+                        <div class="scope-content">
+                            ${configSections}
+                            ${envSection}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = html;
+        }
+
+        function updateLastUpdate() {
+            const element = document.getElementById('lastUpdate');
+            if (data.lastUpdate) {
+                element.textContent = new Date(data.lastUpdate).toLocaleString();
+            }
+        }
+
+        // Environment Variables Functions
+        function updateUserEnvVars() {
+            const container = document.getElementById('userEnvVars');
+            
+            if (data.userEnvVars?.error) {
+                container.innerHTML = `<div class="config-file error">Error: ${data.userEnvVars.error}</div>`;
+                return;
+            }
+
+            if (!data.userEnvVars || Object.keys(data.userEnvVars).length === 0) {
+                container.innerHTML = '<div class="empty-state">No user environment variables configured</div>';
+                return;
+            }
+
+            const html = Object.entries(data.userEnvVars).map(([key, value]) => {
+                const maskedValue = maskEnvValue(value);
+                return `
+                    <div class="env-var">
+                        <div class="env-var-info">
+                            <div class="env-var-name">${escapeHtml(key)}</div>
+                            <div class="env-var-value">${maskedValue}</div>
+                        </div>
+                        <div class="env-var-actions">
+                            <button class="btn-small-env success" onclick="addToProject('${escapeHtml(key)}', '${escapeHtml(value)}')">Add to Project</button>
+                            <button class="btn-small-env danger" onclick="deleteUserEnvVar('${escapeHtml(key)}')">Delete</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = html;
+        }
+
+        function maskEnvValue(value) {
+            if (!value) return '';
+            
+            // Truncate long values to keep display clean
+            const maxDisplayLength = 20;
+            
+            if (value.length <= 4) {
+                return '*'.repeat(value.length);
+            }
+            
+            if (value.length <= maxDisplayLength) {
+                const firstTwo = value.substring(0, 2);
+                const lastTwo = value.substring(value.length - 2);
+                const middle = '*'.repeat(Math.max(0, value.length - 4));
+                return firstTwo + middle + lastTwo;
+            }
+            
+            // For very long values, just show first 2 chars + asterisks + last 2 chars
+            const firstTwo = value.substring(0, 2);
+            const lastTwo = value.substring(value.length - 2);
+            const middleLength = Math.min(12, maxDisplayLength - 4); // Cap at reasonable length
+            return firstTwo + '*'.repeat(middleLength) + lastTwo;
+        }
+
+        function shouldMaskEnvVar(key) {
+            const sensitivePatterns = [
+                'key', 'secret', 'token', 'password', 'pass', 'auth', 
+                'credential', 'private', 'api_key', 'access_key', 
+                'client_secret', 'bearer', 'jwt', 'oauth'
+            ];
+            
+            const keyLower = key.toLowerCase();
+            return sensitivePatterns.some(pattern => keyLower.includes(pattern));
+        }
+
+        function updateEnvInputType() {
+            const keyInput = document.getElementById('envKey');
+            const valueInput = document.getElementById('envValue');
+            
+            if (keyInput && valueInput) {
+                const shouldMask = shouldMaskEnvVar(keyInput.value);
+                valueInput.type = shouldMask ? 'password' : 'text';
+            }
+        }
+
+        function setEnvVar(key, value) {
+            document.getElementById('envKey').value = key;
+            document.getElementById('envValue').value = value;
+            updateEnvInputType(); // Update input type based on key
+        }
+
+        async function addUserEnvVar() {
+            const key = document.getElementById('envKey').value;
+            const value = document.getElementById('envValue').value;
+            
+            if (!key || !value) {
+                alert('Please enter both key and value');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/add-user-env', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key, value })
+                });
+                
+                if (response.ok) {
+                    document.getElementById('envKey').value = '';
+                    document.getElementById('envValue').value = '';
+                    refreshData();
+                } else {
+                    const error = await response.json();
+                    alert(`Error: ${error.error}`);
+                }
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        async function deleteUserEnvVar(key) {
+            if (!confirm(`Delete environment variable "${key}"?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/delete-user-env', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key })
+                });
+                
+                if (response.ok) {
+                    refreshData();
+                } else {
+                    const error = await response.json();
+                    alert(`Error: ${error.error}`);
+                }
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        async function addToProject(key, value) {
+            // Show project selection dialog
+            if (!data.projects || Object.keys(data.projects).length === 0) {
+                alert('No projects available');
+                return;
+            }
+
+            // Create modal dialog with dropdown
+            showProjectSelectionModal(key, value);
+        }
+
+        function showProjectSelectionModal(envKey, envValue) {
+            // Create modal overlay
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.5);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 2000;
+            `;
+
+            // Create modal content
+            const modalContent = document.createElement('div');
+            modalContent.style.cssText = `
+                background: #374151;
+                border-radius: 8px;
+                padding: 2rem;
+                min-width: 400px;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+                border: 1px solid #4b5563;
+            `;
+
+            // Build project options
+            const projectOptions = Object.entries(data.projects).map(([name, project]) => 
+                `<option value="${name}">${name} (${project.path})</option>`
+            ).join('');
+
+            modalContent.innerHTML = `
+                <h3 style="color: #f9fafb; margin-bottom: 1rem; font-size: 1.25rem;">
+                    Add "${envKey}" to Project
+                </h3>
+                <div style="margin-bottom: 1.5rem;">
+                    <label style="display: block; font-size: 0.875rem; font-weight: 600; color: #d1d5db; margin-bottom: 0.5rem;">
+                        Select Project:
+                    </label>
+                    <select id="projectSelectModal" style="width: 100%; padding: 0.75rem; border: 1px solid #4b5563; border-radius: 4px; font-size: 0.875rem; background: #1f2937; color: #e5e7eb;">
+                        <option value="">Choose a project...</option>
+                        ${projectOptions}
+                    </select>
+                </div>
+                <div style="margin-bottom: 1.5rem; padding: 0.75rem; background: #1f2937; border-radius: 4px; border: 1px solid #374151;">
+                    <div style="font-size: 0.875rem; color: #9ca3af; margin-bottom: 0.5rem;">Variable Details:</div>
+                    <div style="font-family: 'SF Mono', Monaco, monospace; font-size: 0.875rem;">
+                        <div style="color: #10b981;"><strong>Key:</strong> ${escapeHtml(envKey)}</div>
+                        <div style="color: #f59e0b;"><strong>Value:</strong> ${maskEnvValue(envValue)}</div>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                    <button id="cancelProjectModal" style="background: #6b7280; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem; font-weight: 600;">
+                        Cancel
+                    </button>
+                    <button id="confirmProjectModal" style="background: #10b981; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem; font-weight: 600;" disabled>
+                        Add to Project
+                    </button>
+                </div>
+            `;
+
+            modal.appendChild(modalContent);
+            document.body.appendChild(modal);
+
+            // Add event listeners
+            const projectSelect = document.getElementById('projectSelectModal');
+            const confirmBtn = document.getElementById('confirmProjectModal');
+            const cancelBtn = document.getElementById('cancelProjectModal');
+
+            projectSelect.addEventListener('change', () => {
+                confirmBtn.disabled = !projectSelect.value;
+                if (projectSelect.value) {
+                    confirmBtn.style.background = '#10b981';
+                } else {
+                    confirmBtn.style.background = '#6b7280';
+                }
+            });
+
+            confirmBtn.addEventListener('click', async () => {
+                const selectedProject = projectSelect.value;
+                if (!selectedProject) return;
+
+                confirmBtn.disabled = true;
+                confirmBtn.textContent = 'Adding...';
+
+                try {
+                    const response = await fetch('/api/add-env-to-project', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            projectName: selectedProject, 
+                            key: envKey, 
+                            value: envValue 
+                        })
+                    });
+                    
+                    if (response.ok) {
+                        alert(`✅ Added "${envKey}" to project "${selectedProject}"`);
+                        refreshData();
+                        document.body.removeChild(modal);
+                    } else {
+                        const error = await response.json();
+                        alert(`Error: ${error.error}`);
+                        confirmBtn.disabled = false;
+                        confirmBtn.textContent = 'Add to Project';
+                    }
+                } catch (error) {
+                    alert(`Error: ${error.message}`);
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = 'Add to Project';
+                }
+            });
+
+            cancelBtn.addEventListener('click', () => {
+                document.body.removeChild(modal);
+            });
+
+            // Close on background click
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    document.body.removeChild(modal);
+                }
+            });
+
+            // Close on Escape key
+            const escapeHandler = (e) => {
+                if (e.key === 'Escape') {
+                    document.body.removeChild(modal);
+                    document.removeEventListener('keydown', escapeHandler);
+                }
+            };
+            document.addEventListener('keydown', escapeHandler);
+        }
+
+        // Load templates, projects, and hooks
+        let templates = {};
+        let commonHooks = {};
+        
+        async function loadTemplates() {
+            try {
+                const response = await fetch('/api/mcp-templates');
+                templates = await response.json();
+                
+                const templateSelect = document.getElementById('mcpTemplate');
+                Object.entries(templates).forEach(([key, template]) => {
+                    const option = document.createElement('option');
+                    option.value = key;
+                    option.textContent = `${template.name} - ${template.description}`;
+                    templateSelect.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Failed to load templates:', error);
+            }
+        }
+
+        async function loadCommonHooks() {
+            try {
+                const response = await fetch('/api/common-hooks');
+                commonHooks = await response.json();
+                onHookEventChange(); // Populate initial preset options
+            } catch (error) {
+                console.error('Failed to load common hooks:', error);
+            }
+        }
+
+        function onTemplateChange() {
+            const templateKey = document.getElementById('mcpTemplate').value;
+            const nameInput = document.getElementById('mcpName');
+            const commandInput = document.getElementById('mcpCommand');
+            
+            // Clear existing parameter form
+            clearMcpParameterForm();
+            
+            if (templateKey && templates[templateKey]) {
+                const template = templates[templateKey];
+                nameInput.value = templateKey;
+                commandInput.value = template.command;
+                commandInput.disabled = true;
+                
+                // Show parameter form if template has parameters or env vars
+                if (template.parameters || template.envVars) {
+                    showMcpParameterForm(template);
+                }
+            } else {
+                nameInput.value = '';
+                commandInput.value = '';
+                commandInput.disabled = false;
+            }
+        }
+
+        function clearMcpParameterForm() {
+            const existingForm = document.getElementById('mcpParameterForm');
+            if (existingForm) {
+                existingForm.remove();
+            }
+        }
+
+        function showMcpParameterForm(template) {
+            const mcpSection = document.querySelector('.scope-section .scope-content .add-form');
+            
+            const parameterForm = document.createElement('div');
+            parameterForm.id = 'mcpParameterForm';
+            parameterForm.style.cssText = `
+                background: #111827;
+                border: 1px solid #374151;
+                border-radius: 6px;
+                padding: 1rem;
+                margin-top: 1rem;
+            `;
+            
+            let formHTML = `
+                <h4 style="color: #f9fafb; margin-bottom: 1rem; font-size: 1rem;">
+                    Configuration for ${template.name}
+                </h4>
+            `;
+            
+            // Add parameter fields
+            if (template.parameters) {
+                template.parameters.forEach(param => {
+                    const suggestions = findEnvSuggestions(param.envHints || [param.name]);
+                    formHTML += createParameterField(param, suggestions, 'parameter');
+                });
+            }
+            
+            // Add environment variable fields
+            if (template.envVars) {
+                template.envVars.forEach(envVar => {
+                    const suggestions = findEnvSuggestions(envVar.envHints || [envVar.name]);
+                    formHTML += createParameterField(envVar, suggestions, 'envvar');
+                });
+            }
+            
+            parameterForm.innerHTML = formHTML;
+            mcpSection.appendChild(parameterForm);
+        }
+
+        function createParameterField(param, suggestions, type) {
+            const fieldId = `mcp_${type}_${param.name}`;
+            const isRequired = param.required !== false;
+            const suggestionsHTML = suggestions.length > 0 ? 
+                `<div style="margin-top: 0.25rem; font-size: 0.75rem; color: #6b7280;">
+                    Suggestions: ${suggestions.map(s => `<span style="background: #374151; padding: 0.125rem 0.25rem; border-radius: 3px; margin-right: 0.25rem; cursor: pointer;" onclick="document.getElementById('${fieldId}').value='${s}'">${s}</span>`).join('')}
+                </div>` : '';
+            
+            return `
+                <div style="margin-bottom: 1rem;">
+                    <label style="display: block; font-size: 0.875rem; font-weight: 600; color: #d1d5db; margin-bottom: 0.25rem;">
+                        ${param.label} ${isRequired ? '<span style="color: #ef4444;">*</span>' : ''}
+                    </label>
+                    <input type="${type === 'envvar' ? 'password' : 'text'}" 
+                           id="${fieldId}" 
+                           name="${param.name}"
+                           placeholder="${param.default || ''}"
+                           style="width: 100%; padding: 0.5rem; border: 1px solid #4b5563; border-radius: 4px; font-size: 0.875rem; background: #374151; color: #e5e7eb;"
+                           ${isRequired ? 'required' : ''} />
+                    <div style="margin-top: 0.25rem; font-size: 0.75rem; color: #9ca3af;">
+                        ${param.description}
+                    </div>
+                    ${suggestionsHTML}
+                </div>
+            `;
+        }
+
+        function findEnvSuggestions(hints) {
+            if (!data.userEnvVars) return [];
+            
+            const suggestions = [];
+            const userEnvKeys = Object.keys(data.userEnvVars).map(k => k.toLowerCase());
+            
+            hints.forEach(hint => {
+                const hintLower = hint.toLowerCase();
+                userEnvKeys.forEach(envKey => {
+                    if (envKey.includes(hintLower) || hintLower.includes(envKey)) {
+                        const originalKey = Object.keys(data.userEnvVars).find(k => k.toLowerCase() === envKey);
+                        if (originalKey && !suggestions.includes(data.userEnvVars[originalKey])) {
+                            suggestions.push(data.userEnvVars[originalKey]);
+                        }
+                    }
+                });
+            });
+            
+            return suggestions.slice(0, 3); // Limit to 3 suggestions
+        }
+
+        function updateProjectsList() {
+            const projectSelect = document.getElementById('mcpProject');
+            projectSelect.innerHTML = '<option value="">Select project...</option>';
+            
+            if (data.projects) {
+                Object.entries(data.projects).forEach(([name, project]) => {
+                    const option = document.createElement('option');
+                    option.value = project.path;
+                    option.textContent = name;
+                    projectSelect.appendChild(option);
+                });
+            }
+        }
+
+        // Config Display and Editing Functions
+        function createConfigDisplay(content, type, filePath, isEmpty = false) {
+            const uniqueId = 'config_' + Math.random().toString(36).substr(2, 9);
+            const isLarge = content.length > 500;
+            
+            let displayContent = '';
+            if (type === 'json' && !isEmpty) {
+                displayContent = `<div class="json-syntax">${highlightJson(content)}</div>`;
+            } else if (type === 'markdown' && !isEmpty) {
+                displayContent = `<div class="markdown-content">${renderMarkdown(content)}</div>`;
+            } else {
+                displayContent = `<div class="text-content">${escapeHtml(content)}</div>`;
+            }
+
+            const collapseButton = isLarge ? `<button class="collapse-toggle" onclick="toggleCollapse('${uniqueId}')">▼</button>` : '';
+            const editButton = `<button class="edit-toggle" onclick="toggleEdit('${uniqueId}', '${type}', '${escapeHtml(filePath)}')">✏️</button>`;
+            
+            return `
+                <div class="config-container" style="position: relative;">
+                    ${collapseButton}
+                    ${editButton}
+                    <div id="${uniqueId}" class="config-content ${isLarge ? 'collapsible' : ''}" data-content="${escapeHtml(content)}" data-type="${type}" data-path="${escapeHtml(filePath)}">
+                        ${displayContent}
+                    </div>
+                </div>
+            `;
+        }
+
+        function highlightJson(jsonString) {
+            return jsonString
+                .replace(/("[\w\s_-]+")(\s*:\s*)/g, '<span class="json-key">$1</span>$2')
+                .replace(/:\s*(".*?")/g, ': <span class="json-string">$1</span>')
+                .replace(/:\s*(\d+\.?\d*)/g, ': <span class="json-number">$1</span>')
+                .replace(/:\s*(true|false)/g, ': <span class="json-boolean">$1</span>')
+                .replace(/:\s*(null)/g, ': <span class="json-null">$1</span>');
+        }
+
+        function renderMarkdown(markdown) {
+            return markdown
+                .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+                .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+                .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/`(.*?)`/g, '<code>$1</code>')
+                .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+                .replace(/^\- (.*$)/gim, '<li>$1</li>')
+                .replace(/(<li>.*<\/li>)/gis, '<ul>$1</ul>')
+                .replace(/\n/g, '<br>');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function toggleCollapse(elementId) {
+            const element = document.getElementById(elementId);
+            const button = element.parentElement.querySelector('.collapse-toggle');
+            
+            if (element.classList.contains('collapsible')) {
+                element.classList.remove('collapsible');
+                element.classList.add('expanded');
+                if (button) button.textContent = '▲';
+            } else {
+                element.classList.add('collapsible');
+                element.classList.remove('expanded');
+                if (button) button.textContent = '▼';
+            }
+        }
+
+        function toggleEdit(elementId, type, filePath) {
+            const element = document.getElementById(elementId);
+            const content = element.dataset.content;
+            
+            if (element.classList.contains('editing')) {
+                // Cancel editing
+                element.classList.remove('editing');
+                element.innerHTML = type === 'json' ? highlightJson(content) : 
+                                 type === 'markdown' ? renderMarkdown(content) : escapeHtml(content);
+            } else {
+                // Start editing
+                element.classList.add('editing');
+                const editorClass = type === 'json' ? 'json-editor' : 'markdown-editor';
+                element.innerHTML = `
+                    <textarea class="${editorClass}" id="editor_${elementId}">${content}</textarea>
+                    ${type === 'markdown' ? '<div class="markdown-preview" id="preview_' + elementId + '"></div>' : ''}
+                    <div class="editor-controls">
+                        <button class="btn-small" onclick="saveFile('${elementId}', '${type}', '${filePath}')">Save</button>
+                        <button class="btn-small secondary" onclick="cancelEdit('${elementId}', '${type}')">Cancel</button>
+                        ${type === 'markdown' ? '<button class="btn-small secondary" onclick="previewMarkdown(\'' + elementId + '\')">Preview</button>' : ''}
+                    </div>
+                `;
+                
+                if (type === 'markdown') {
+                    document.getElementById(`editor_${elementId}`).addEventListener('input', function() {
+                        previewMarkdown(elementId);
+                    });
+                    previewMarkdown(elementId);
+                }
+            }
+        }
+
+        function cancelEdit(elementId, type) {
+            const element = document.getElementById(elementId);
+            const content = element.dataset.content;
+            
+            element.classList.remove('editing');
+            element.innerHTML = type === 'json' ? highlightJson(content) : 
+                             type === 'markdown' ? renderMarkdown(content) : escapeHtml(content);
+        }
+
+        function previewMarkdown(elementId) {
+            const editor = document.getElementById(`editor_${elementId}`);
+            const preview = document.getElementById(`preview_${elementId}`);
+            
+            if (editor && preview) {
+                preview.innerHTML = renderMarkdown(editor.value);
+            }
+        }
+
+        async function saveFile(elementId, type, filePath) {
+            const editor = document.getElementById(`editor_${elementId}`);
+            const content = editor.value;
+            
+            try {
+                const response = await fetch('/api/save-file', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filePath, content, type })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    alert('File saved successfully!');
+                    
+                    // Update the element's data and display
+                    const element = document.getElementById(elementId);
+                    element.dataset.content = content;
+                    cancelEdit(elementId, type);
+                    
+                    // Refresh data to show changes
+                    refreshData();
+                } else {
+                    const error = await response.json();
+                    alert(`Error: ${error.error}`);
+                }
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        // Hook Preset Functions
+        function onHookEventChange() {
+            const event = document.getElementById('hookEvent').value;
+            const presetSelect = document.getElementById('hookPreset');
+            
+            // Clear existing options except "Custom Hook"
+            presetSelect.innerHTML = '<option value="">Custom Hook</option>';
+            
+            if (commonHooks[event]) {
+                commonHooks[event].forEach((hookPreset, index) => {
+                    const option = document.createElement('option');
+                    option.value = index;
+                    option.textContent = hookPreset.name;
+                    presetSelect.appendChild(option);
+                });
+            }
+        }
+
+        function onHookPresetChange() {
+            const event = document.getElementById('hookEvent').value;
+            const presetIndex = document.getElementById('hookPreset').value;
+            const patternInput = document.getElementById('hookPattern');
+            const commandInput = document.getElementById('hookCommand');
+            
+            if (presetIndex !== '' && commonHooks[event] && commonHooks[event][presetIndex]) {
+                const preset = commonHooks[event][presetIndex];
+                patternInput.value = preset.pattern;
+                commandInput.value = preset.command;
+            } else {
+                // Clear for custom input
+                patternInput.value = '*';
+                commandInput.value = '';
+            }
+        }
+
+        // API Functions
+        async function addMcpServer() {
+            const name = document.getElementById('mcpName').value;
+            const command = document.getElementById('mcpCommand').value;
+            const scope = document.getElementById('mcpScope').value;
+            const template = document.getElementById('mcpTemplate').value;
+            const projectPath = document.getElementById('mcpProject').value;
+            
+            if (!name || (!command && !template)) {
+                alert('Please fill in server name and command/template');
+                return;
+            }
+
+            if (scope === 'project' && !projectPath) {
+                alert('Please select a project for project scope');
+                return;
+            }
+
+            // Collect parameters and environment variables
+            const parameters = {};
+            const envVars = {};
+            let missingRequired = [];
+
+            if (template && templates[template]) {
+                const templateConfig = templates[template];
+                
+                // Collect command parameters
+                if (templateConfig.parameters) {
+                    templateConfig.parameters.forEach(param => {
+                        const input = document.getElementById(`mcp_parameter_${param.name}`);
+                        if (input) {
+                            const value = input.value.trim();
+                            if (param.required && !value) {
+                                missingRequired.push(param.label);
+                            } else if (value) {
+                                parameters[param.name] = value;
+                            }
+                        }
+                    });
+                }
+                
+                // Collect environment variables
+                if (templateConfig.envVars) {
+                    templateConfig.envVars.forEach(envVar => {
+                        const input = document.getElementById(`mcp_envvar_${envVar.name}`);
+                        if (input) {
+                            const value = input.value.trim();
+                            if (envVar.required && !value) {
+                                missingRequired.push(envVar.label);
+                            } else if (value) {
+                                envVars[envVar.name] = value;
+                            }
+                        }
+                    });
+                }
+            }
+
+            if (missingRequired.length > 0) {
+                alert(`Please fill in required fields: ${missingRequired.join(', ')}`);
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/add-mcp-server', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        name, 
+                        command, 
+                        scope, 
+                        template, 
+                        projectPath, 
+                        parameters, 
+                        envVars 
+                    })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    alert(result.message || 'MCP server added successfully');
+                    document.getElementById('mcpName').value = '';
+                    document.getElementById('mcpCommand').value = '';
+                    document.getElementById('mcpTemplate').value = '';
+                    clearMcpParameterForm();
+                    onTemplateChange(); // Reset form
+                    refreshData();
+                } else {
+                    const error = await response.json();
+                    alert(`Error: ${error.error}`);
+                }
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        async function addHook() {
+            const event = document.getElementById('hookEvent').value;
+            const pattern = document.getElementById('hookPattern').value || '*';
+            const command = document.getElementById('hookCommand').value;
+            
+            if (!command) {
+                alert('Please enter a command');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/add-hook', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ event, pattern, command })
+                });
+                
+                if (response.ok) {
+                    document.getElementById('hookPattern').value = '';
+                    document.getElementById('hookCommand').value = '';
+                    refreshData();
+                } else {
+                    const error = await response.json();
+                    alert(`Error: ${error.error}`);
+                }
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        async function unregisterProject(projectName) {
+            if (!confirm(`Are you sure you want to unregister project "${projectName}"?\n\nThis will:\n- Remove it from the Claude Manager registry\n- Clean up associated environment variables\n- Stop monitoring its configuration files\n\nThe project files themselves will NOT be deleted.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/unregister-project', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: projectName })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    alert(result.message || 'Project unregistered successfully');
+                    refreshData();
+                } else {
+                    const error = await response.json();
+                    alert(`Error: ${error.error}`);
+                }
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        // Session Tracking Functions
+        function updateSessionTracking() {
+            const headerEnabledCheckbox = document.getElementById('headerSessionTrackingEnabled');
+            const planTypeSelect = document.getElementById('planType');
+            const billingPeriodInput = document.getElementById('billingPeriodStart');
+            const statsContainer = document.getElementById('sessionStats');
+            
+            if (data.sessionTracking) {
+                headerEnabledCheckbox.checked = data.sessionTracking.enabled;
+                planTypeSelect.value = data.sessionTracking.planType || 'pro';
+                
+                // Set billing period to today if not set
+                const billingPeriod = data.sessionTracking.billingPeriodStart || new Date().toISOString().slice(0, 10);
+                billingPeriodInput.value = billingPeriod;
+                
+                // Fetch and display session stats
+                fetchSessionStats();
+                
+                // Update session countdown if active
+                updateSessionCountdown();
+            } else {
+                // Set default values for first-time users
+                planTypeSelect.value = 'pro';
+                billingPeriodInput.value = new Date().toISOString().slice(0, 10);
+                statsContainer.innerHTML = '<div class="empty-state">Session tracking not configured</div>';
+            }
+        }
+
+        async function fetchSessionStats() {
+            try {
+                const response = await fetch('/api/session-stats');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const stats = await response.json();
+                displaySessionStats(stats);
+            } catch (error) {
+                console.error('Failed to fetch session stats:', error);
+                const container = document.getElementById('sessionStats');
+                if (error.name === 'SyntaxError') {
+                    container.innerHTML = '<div class="config-file error">Invalid server response - please refresh the page</div>';
+                } else {
+                    container.innerHTML = `<div class="config-file error">Failed to load session stats: ${error.message}</div>`;
+                }
+            }
+        }
+
+        function displaySessionStats(stats) {
+            const container = document.getElementById('sessionStats');
+            
+            if (!stats || !stats.tracking || !stats.tracking.enabled) {
+                container.innerHTML = '<div class="empty-state">Session tracking is disabled</div>';
+                return;
+            }
+
+            // Safely access nested properties with defaults
+            const usage = stats.usage || {};
+            const limits = stats.limits || {};
+            const tracking = stats.tracking || {};
+            const sessionStats = stats.stats || {};
+
+            const progress = (usage.monthlyProgress || 0) * 100;
+            const progressClass = progress >= 90 ? 'progress-danger' : progress >= 70 ? 'progress-warning' : 'progress-safe';
+            
+            let warningMessage = '';
+            if (progress >= 90) {
+                warningMessage = '<div class="session-danger">⚠️ Warning: You\'re approaching your monthly session limit!</div>';
+            } else if (progress >= 70) {
+                warningMessage = '<div class="session-warning">⚠️ Caution: You\'ve used 70% of your monthly sessions</div>';
+            }
+
+            const formatDuration = (seconds) => {
+                const hours = Math.floor(seconds / 3600);
+                const minutes = Math.floor((seconds % 3600) / 60);
+                return `${hours}h ${minutes}m`;
+            };
+
+            const formatDate = (dateStr) => {
+                if (!dateStr) return 'Not set';
+                return new Date(dateStr).toLocaleDateString();
+            };
+
+            container.innerHTML = `
+                ${warningMessage}
+                <div class="session-stats">
+                    <div class="stat-card">
+                        <div class="stat-value">${sessionStats.sessionsCount || 0}</div>
+                        <div class="stat-label">Sessions This Period</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill ${progressClass}" style="width: ${Math.min(progress, 100)}%"></div>
+                        </div>
+                        <div style="font-size: 0.75rem; color: #6b7280; margin-top: 0.25rem;">
+                            ${Math.round(progress)}% of ${limits.monthlySessions || 50} sessions
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${formatDuration(sessionStats.totalDuration || 0)}</div>
+                        <div class="stat-label">Total Duration</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${sessionStats.activeSessions || 0}</div>
+                        <div class="stat-label">Active Sessions</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${usage.estimatedMonthlyUsage || 0}</div>
+                        <div class="stat-label">Estimated Monthly</div>
+                        <div style="font-size: 0.75rem; color: #6b7280; margin-top: 0.25rem;">
+                            Based on current usage pattern
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-top: 1rem; padding: 1rem; background: #1f2937; border-radius: 4px; font-size: 0.875rem;">
+                    <div><strong>Plan:</strong> ${(tracking.planType || 'pro').toUpperCase()} (${limits.codePrompts5h || '10-40'} prompts per 5-hour window)</div>
+                    <div><strong>Billing Period:</strong> ${formatDate(tracking.billingPeriodStart)} - ${formatDate(new Date(Date.now() + 30*24*60*60*1000).toISOString().slice(0, 10))}</div>
+                    <div><strong>Time in Period:</strong> ${Math.round((usage.timeInCurrentPeriod || 0) * 100)}% elapsed</div>
+                </div>
+            `;
+        }
+
+        async function toggleSessionTracking() {
+            const enabled = document.getElementById('headerSessionTrackingEnabled').checked;
+            
+            // If enabling and billing period is not set, set it to today
+            if (enabled) {
+                const billingPeriodInput = document.getElementById('billingPeriodStart');
+                if (!billingPeriodInput.value) {
+                    billingPeriodInput.value = new Date().toISOString().slice(0, 10);
+                    // Update the config with the new date
+                    await updateSessionConfig();
+                }
+            }
+            
+            try {
+                const response = await fetch('/api/toggle-session-tracking', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled })
+                });
+                
+                if (response.ok) {
+                    refreshData();
+                    updateSessionCountdown(); // Update countdown immediately after toggling
+                    if (enabled) {
+                        alert('✅ Session tracking enabled! Claude Code will now track session duration and usage.');
+                    } else {
+                        alert('❌ Session tracking disabled. Hooks have been removed from your Claude settings.');
+                    }
+                } else {
+                    const error = await response.json();
+                    alert(`Error: ${error.error}`);
+                    // Revert checkbox state
+                    document.getElementById('headerSessionTrackingEnabled').checked = !enabled;
+                }
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+                // Revert checkbox state
+                document.getElementById('headerSessionTrackingEnabled').checked = !enabled;
+            }
+        }
+
+        async function updateSessionConfig() {
+            const planType = document.getElementById('planType').value;
+            const billingPeriodStart = document.getElementById('billingPeriodStart').value;
+            
+            try {
+                const response = await fetch('/api/update-session-config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ planType, billingPeriodStart })
+                });
+                
+                if (response.ok) {
+                    refreshData();
+                } else {
+                    const error = await response.json();
+                    alert(`Error: ${error.error}`);
+                }
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        async function clearSessionData() {
+            if (!confirm('Are you sure you want to clear all session tracking data? This cannot be undone.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/clear-session-data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (response.ok) {
+                    alert('Session data cleared successfully');
+                    refreshData();
+                } else {
+                    const error = await response.json();
+                    alert(`Error: ${error.error}`);
+                }
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        // Settings Panel Functions
+        function toggleSettingsPanel() {
+            const panel = document.getElementById('settingsPanel');
+            panel.classList.toggle('open');
+        }
+
+        // Session Countdown Functions
+        async function updateSessionCountdown() {
+            if (!data.sessionTracking || !data.sessionTracking.enabled) {
+                document.getElementById('sessionStatusHeader').style.display = 'none';
+                return;
+            }
+            
+            try {
+                // Fetch countdown info from the backend
+                const response = await fetch('/api/countdown');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const countdown = await response.json();
+                
+                if (countdown.hasActiveSession && countdown.timeRemaining > 0) {
+                    const hours = countdown.hours;
+                    const minutes = countdown.minutes;
+                    const seconds = countdown.seconds;
+                    
+                    // Format the display based on time remaining
+                    let timeDisplay;
+                    if (hours > 0) {
+                        timeDisplay = `${hours}h ${minutes}m`;
+                    } else if (minutes > 0) {
+                        timeDisplay = `${minutes}m ${seconds}s`;
+                    } else {
+                        timeDisplay = `${seconds}s`;
+                    }
+                    
+                    document.getElementById('sessionTimeRemaining').textContent = timeDisplay;
+                    document.getElementById('sessionStatusHeader').style.display = 'block';
+                    
+                    // Show additional info if available
+                    const statusHeader = document.getElementById('sessionStatusHeader');
+                    statusHeader.title = `Session started: ${new Date(countdown.sessionStart).toLocaleTimeString()}\nProject: ${countdown.project || 'Unknown'}`;
+                    
+                    // Change color when time is running low
+                    if (countdown.timeRemaining < 30 * 60 * 1000) { // Less than 30 minutes
+                        statusHeader.style.backgroundColor = '#dc2626'; // Red
+                        statusHeader.style.color = 'white';
+                    } else if (countdown.timeRemaining < 60 * 60 * 1000) { // Less than 1 hour
+                        statusHeader.style.backgroundColor = '#f59e0b'; // Yellow/orange
+                        statusHeader.style.color = 'white';
+                    } else {
+                        statusHeader.style.backgroundColor = '#1f2937'; // Default
+                        statusHeader.style.color = '#e5e7eb';
+                    }
+                } else {
+                    // Hide if no active sessions
+                    document.getElementById('sessionStatusHeader').style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Failed to fetch countdown info:', error);
+                // Fallback to hiding the countdown on error
+                document.getElementById('sessionStatusHeader').style.display = 'none';
+            }
+        }
+
+        // Initialize
+        connect();
+        loadTemplates();
+        loadCommonHooks();
+        refreshData();
+        
+        // Start session countdown timer
+        updateSessionCountdown(); // Call immediately
+        setInterval(updateSessionCountdown, 10000); // Update every 10 seconds for better accuracy
+    </script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+{
+  "projects": {
+    "test-project": {
+      "path": "/Users/danielbeach/Code/claude-manager",
+      "registeredAt": 1752288875000,
+      "git_remote": "none",
+      "language": "node"
+    },
+    "code-grapher": {
+      "path": "/Users/danielbeach/Code/code-grapher",
+      "registeredAt": 1752296570000,
+      "git_remote": "none",
+      "language": "python"
+    },
+    "HouseAI": {
+      "path": "/Users/danielbeach/Code/agent_apps/HouseAI",
+      "registeredAt": 1752306949000,
+      "git_remote": "https://github.com/mufasadb/HouseAI.git",
+      "language": "unknown"
+    }
+  }
+}

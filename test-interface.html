@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Interface Test</title>
+    <style>
+        .config-content.collapsible {
+            max-height: 200px;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+        .config-content.expanded {
+            max-height: none;
+        }
+        .collapse-toggle {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+            cursor: pointer;
+        }
+        .test-content {
+            background: #f9fafb;
+            padding: 1rem;
+            border: 1px solid #e5e7eb;
+            margin: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <h1>Collapse/Expand Test</h1>
+    
+    <div class="test-content">
+        <button class="collapse-toggle" onclick="toggleCollapse('test1')">▼</button>
+        <div id="test1" class="config-content collapsible">
+            <p>This is some test content that should be collapsible.</p>
+            <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+            <p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+            <p>More content here to make it long enough to test the collapse functionality properly.</p>
+        </div>
+    </div>
+
+    <script>
+        function toggleCollapse(elementId) {
+            const element = document.getElementById(elementId);
+            const button = element.parentElement.querySelector('.collapse-toggle');
+            
+            console.log('Toggling collapse for:', elementId);
+            console.log('Element:', element);
+            console.log('Button:', button);
+            
+            if (element.classList.contains('collapsible')) {
+                element.classList.remove('collapsible');
+                element.classList.add('expanded');
+                if (button) button.textContent = '▲';
+                console.log('Expanded');
+            } else {
+                element.classList.add('collapsible');
+                element.classList.remove('expanded');
+                if (button) button.textContent = '▼';
+                console.log('Collapsed');
+            }
+        }
+    </script>
+</body>
+</html>

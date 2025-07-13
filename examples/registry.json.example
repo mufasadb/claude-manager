@@ -1,0 +1,74 @@
+{
+  "projects": {
+    "my-awesome-app": {
+      "path": "/Users/username/projects/my-awesome-app",
+      "registeredAt": 1704967200000,
+      "git_remote": "https://github.com/username/my-awesome-app.git",
+      "language": "node",
+      "config": {
+        "settings": {
+          "hooks": {
+            "PreToolUse": [
+              {
+                "matcher": "Bash",
+                "hooks": [
+                  {
+                    "type": "command",
+                    "command": "echo 'Validating command safety...'"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "memory": "# Project-specific Claude instructions\n\nThis is a Node.js application with the following key features:\n- Express.js web server\n- TypeScript for type safety\n- Jest for testing\n\n## Development Commands\n- `npm run dev` - Start development server\n- `npm test` - Run tests\n- `npm run build` - Build for production"
+      }
+    },
+    "python-project": {
+      "path": "/Users/username/projects/python-app",
+      "registeredAt": 1704967300000,
+      "language": "python",
+      "config": {
+        "settings": {
+          "hooks": {
+            "PostToolUse": [
+              {
+                "matcher": "Write|Edit|MultiEdit",
+                "hooks": [
+                  {
+                    "type": "command",
+                    "command": "black $CLAUDE_FILE_PATHS && isort $CLAUDE_FILE_PATHS"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "memory": "# Python Application\n\nFastAPI application with the following structure:\n- `/app` - Main application code\n- `/tests` - Test files\n- `requirements.txt` - Dependencies\n\n## Commands\n- `uvicorn app.main:app --reload` - Start dev server\n- `pytest` - Run tests\n- `black .` - Format code"
+      }
+    },
+    "rust-project": {
+      "path": "/Users/username/projects/rust-cli",
+      "registeredAt": 1704967400000,
+      "language": "rust",
+      "config": {
+        "settings": {
+          "hooks": {
+            "PreToolUse": [
+              {
+                "matcher": "Write|Edit|MultiEdit",
+                "hooks": [
+                  {
+                    "type": "command",
+                    "command": "cargo check"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "lastUpdate": 1704967500000
+}

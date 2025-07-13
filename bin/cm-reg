@@ -1,0 +1,102 @@
+#!/bin/bash
+
+# Global project registration command for claude-manager
+# Registers the current directory as a project to be managed by claude-manager
+
+set -e
+
+# Configuration - Use the same location as the server
+CLAUDE_MANAGER_USER_DIR="$HOME/.claude-manager"
+REGISTRY_FILE="$CLAUDE_MANAGER_USER_DIR/registry.json"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Helper functions
+log_error() {
+    echo -e "${RED}Error: $1${NC}" >&2
+}
+
+log_success() {
+    echo -e "${GREEN}✓ $1${NC}"
+}
+
+log_info() {
+    echo -e "${YELLOW}ℹ $1${NC}"
+}
+
+# Create claude-manager user directory if it doesn't exist
+if [ ! -d "$CLAUDE_MANAGER_USER_DIR" ]; then
+    log_info "Creating claude-manager user directory at $CLAUDE_MANAGER_USER_DIR"
+    mkdir -p "$CLAUDE_MANAGER_USER_DIR"
+fi
+
+# Get current directory info
+CURRENT_DIR=$(pwd)
+PROJECT_NAME=$(basename "$CURRENT_DIR")
+
+# Allow custom project name
+if [ $# -eq 1 ]; then
+    PROJECT_NAME="$1"
+fi
+
+# Initialize registry.json if it doesn't exist
+if [ ! -f "$REGISTRY_FILE" ]; then
+    log_info "Creating new project registry"
+    echo '{"projects": {}, "lastUpdate": '$(date +%s)000'}' > "$REGISTRY_FILE"
+fi
+
+# Check if project already registered
+if grep -q "\"path\": \"$CURRENT_DIR\"" "$REGISTRY_FILE" 2>/dev/null; then
+    log_error "Project at $CURRENT_DIR is already registered"
+    exit 1
+fi
+
+# Get project info
+GIT_REMOTE="$(git remote get-url origin 2>/dev/null || echo 'none')"
+LANGUAGE="$([ -f package.json ] && echo 'node' || [ -f requirements.txt ] && echo 'python' || [ -f Cargo.toml ] && echo 'rust' || [ -f go.mod ] && echo 'go' || echo 'unknown')"
+TIMESTAMP=$(date +%s)000  # Milliseconds timestamp to match existing format
+
+# Add project to registry.json
+python3 -c "
+import json
+import sys
+
+try:
+    with open('$REGISTRY_FILE', 'r') as f:
+        data = json.load(f)
+    
+    # Ensure projects key exists and is an object
+    if 'projects' not in data:
+        data['projects'] = {}
+    
+    # Add the project as a key-value pair in the projects object
+    data['projects']['$PROJECT_NAME'] = {
+        'path': '$CURRENT_DIR',
+        'registeredAt': $TIMESTAMP,
+        'git_remote': '$GIT_REMOTE',
+        'language': '$LANGUAGE'
+    }
+    
+    # Update lastUpdate timestamp
+    data['lastUpdate'] = $TIMESTAMP
+    
+    with open('$REGISTRY_FILE', 'w') as f:
+        json.dump(data, f, indent=2)
+    
+    print('SUCCESS')
+except Exception as e:
+    print(f'ERROR: {e}', file=sys.stderr)
+    sys.exit(1)
+"
+
+if [ $? -eq 0 ]; then
+    log_success "Registered project '$PROJECT_NAME' at $CURRENT_DIR"
+    log_info "Project added to claude-manager registry"
+else
+    log_error "Failed to register project"
+    exit 1
+fi

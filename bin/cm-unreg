@@ -1,0 +1,201 @@
+#!/bin/bash
+
+# Global project unregistration command for claude-manager
+# Unregisters the current directory or specified project from claude-manager
+
+set -e
+
+# Configuration - Use the same location as the server
+CLAUDE_MANAGER_USER_DIR="$HOME/.claude-manager"
+REGISTRY_FILE="$CLAUDE_MANAGER_USER_DIR/registry.json"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Helper functions
+log_error() {
+    echo -e "${RED}Error: $1${NC}" >&2
+}
+
+log_success() {
+    echo -e "${GREEN}✓ $1${NC}"
+}
+
+log_info() {
+    echo -e "${YELLOW}ℹ $1${NC}"
+}
+
+log_warning() {
+    echo -e "${YELLOW}⚠ $1${NC}"
+}
+
+# Check if claude-manager user directory exists
+if [ ! -d "$CLAUDE_MANAGER_USER_DIR" ]; then
+    log_error "No claude-manager configuration found at $CLAUDE_MANAGER_USER_DIR"
+    log_info "No projects have been registered yet"
+    exit 1
+fi
+
+# Check if projects file exists
+if [ ! -f "$REGISTRY_FILE" ]; then
+    log_error "No projects registry found at $REGISTRY_FILE"
+    log_info "No projects have been registered yet"
+    exit 1
+fi
+
+# Determine what to unregister
+CURRENT_DIR=$(pwd)
+TARGET_PROJECT=""
+TARGET_NAME=""
+
+if [ $# -eq 0 ]; then
+    # Unregister current directory
+    TARGET_PROJECT="$CURRENT_DIR"
+    
+    # Find project name by path
+    TARGET_NAME=$(python3 -c "
+import json
+import sys
+
+try:
+    with open('$REGISTRY_FILE', 'r') as f:
+        data = json.load(f)
+    
+    for name, project in data.get('projects', {}).items():
+        if project.get('path') == '$CURRENT_DIR':
+            print(name)
+            break
+    else:
+        print('')
+except Exception as e:
+    print('')
+")
+
+    if [ -z "$TARGET_NAME" ]; then
+        log_error "Current directory is not registered as a project"
+        log_info "Current directory: $CURRENT_DIR"
+        exit 1
+    fi
+    
+elif [ $# -eq 1 ]; then
+    # Unregister by project name
+    TARGET_NAME="$1"
+    
+    # Find project path by name
+    TARGET_PROJECT=$(python3 -c "
+import json
+import sys
+
+try:
+    with open('$REGISTRY_FILE', 'r') as f:
+        data = json.load(f)
+    
+    projects = data.get('projects', {})
+    if '$TARGET_NAME' in projects:
+        print(projects['$TARGET_NAME'].get('path', ''))
+    else:
+        print('')
+except Exception as e:
+    print('')
+")
+
+    if [ -z "$TARGET_PROJECT" ]; then
+        log_error "Project '$TARGET_NAME' not found in registry"
+        log_info "Use 'cm-unreg' without arguments to see registered projects"
+        exit 1
+    fi
+    
+else
+    log_error "Too many arguments"
+    echo "Usage:"
+    echo "  cm-unreg              # Unregister current directory"
+    echo "  cm-unreg <name>       # Unregister project by name"
+    exit 1
+fi
+
+# Show what will be unregistered
+log_info "Project to unregister:"
+echo "  Name: $TARGET_NAME"
+echo "  Path: $TARGET_PROJECT"
+echo ""
+
+# Confirm with user
+log_warning "This will:"
+echo "  - Remove '$TARGET_NAME' from the Claude Manager registry"
+echo "  - Clean up associated environment variables"
+echo "  - Stop monitoring configuration files"
+echo "  - The project files themselves will NOT be deleted"
+echo ""
+
+read -p "Are you sure you want to continue? (y/N): " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    log_info "Unregistration cancelled"
+    exit 0
+fi
+
+# Try to unregister via API first (if claude-manager is running)
+if curl -s --connect-timeout 2 http://localhost:3456/api/status > /dev/null 2>&1; then
+    log_info "Claude Manager is running, unregistering via API..."
+    
+    RESPONSE=$(curl -s -X POST http://localhost:3456/api/unregister-project \
+        -H "Content-Type: application/json" \
+        -d "{\"name\": \"$TARGET_NAME\"}" \
+        --write-out "HTTPSTATUS:%{http_code}")
+    
+    HTTP_STATUS=$(echo $RESPONSE | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+    RESPONSE_BODY=$(echo $RESPONSE | sed -e 's/HTTPSTATUS\:.*//g')
+    
+    if [ "$HTTP_STATUS" -eq 200 ]; then
+        log_success "Successfully unregistered '$TARGET_NAME' from Claude Manager"
+        log_info "Project removed from dashboard and monitoring stopped"
+        exit 0
+    else
+        log_warning "API unregistration failed (HTTP $HTTP_STATUS), falling back to direct file editing"
+        echo "Response: $RESPONSE_BODY"
+    fi
+else
+    log_info "Claude Manager not running, editing projects file directly..."
+fi
+
+# Fallback: Remove from registry.json directly
+python3 -c "
+import json
+import sys
+
+try:
+    with open('$REGISTRY_FILE', 'r') as f:
+        data = json.load(f)
+    
+    projects = data.get('projects', {})
+    
+    if '$TARGET_NAME' not in projects:
+        print('ERROR: Project not found in registry')
+        sys.exit(1)
+    
+    # Remove the project
+    del projects['$TARGET_NAME']
+    
+    # Update lastUpdate timestamp
+    data['lastUpdate'] = $(date +%s)000
+    
+    with open('$REGISTRY_FILE', 'w') as f:
+        json.dump(data, f, indent=2)
+    
+    print('SUCCESS')
+except Exception as e:
+    print(f'ERROR: {e}')
+    sys.exit(1)
+"
+
+if [ $? -eq 0 ]; then
+    log_success "Successfully unregistered '$TARGET_NAME' from projects registry"
+    log_info "Note: Restart Claude Manager to stop file monitoring"
+    log_info "Project files at '$TARGET_PROJECT' were not affected"
+else
+    log_error "Failed to unregister project from file"
+    exit 1
+fi

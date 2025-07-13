@@ -1,0 +1,29 @@
+# Project-specific environment variables
+# Copy this to your project's .env file
+
+# Database Configuration
+DATABASE_URL=postgresql://localhost:5432/myproject
+REDIS_URL=redis://localhost:6379
+
+# API Keys (project-specific)
+STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key
+STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_publishable_key
+
+# External Services
+SENDGRID_API_KEY=SG.your_sendgrid_api_key
+TWILIO_ACCOUNT_SID=your_twilio_account_sid
+TWILIO_AUTH_TOKEN=your_twilio_auth_token
+
+# Application Settings
+NODE_ENV=development
+PORT=3000
+SESSION_SECRET=your_session_secret_key_here
+
+# Feature Flags
+ENABLE_ANALYTICS=true
+ENABLE_DEBUG_MODE=true
+ENABLE_EMAIL_VERIFICATION=false
+
+# Third-party Integrations
+GOOGLE_ANALYTICS_ID=GA-XXXXXXXXX
+SENTRY_DSN=https://your-sentry-dsn-here
