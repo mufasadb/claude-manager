@@ -94,6 +94,45 @@
             transform: rotate(90deg);
         }
 
+        /* Target Selection Styles */
+        .target-selector {
+            margin-bottom: 1rem;
+        }
+
+        .target-tabs {
+            display: flex;
+            border: 1px solid #374151;
+            border-radius: 6px;
+            overflow: hidden;
+            background: #1f2937;
+        }
+
+        .target-tab {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            background: #1f2937;
+            color: #9ca3af;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .target-tab:hover {
+            background: #374151;
+            color: #e5e7eb;
+        }
+
+        .target-tab.active {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .target-tab:first-child {
+            border-right: 1px solid #374151;
+        }
+
         .settings-panel {
             position: fixed;
             top: 0;
@@ -913,6 +952,19 @@
             <div class="scope-section">
                 <div class="scope-header">MCP Servers</div>
                 <div class="scope-content">
+                    <!-- Target Selection -->
+                    <div class="target-selector">
+                        <div class="target-tabs">
+                            <button class="target-tab active" onclick="switchMcpTarget('claude-code')" id="claudeCodeTab">
+                                📟 Claude Code CLI
+                            </button>
+                            <button class="target-tab" onclick="switchMcpTarget('claude-desktop')" id="claudeDesktopTab">
+                                🖥️ Claude Desktop
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Add MCP Server Form -->
                     <div class="add-form">
                         <div class="form-row">
                             <div class="form-group">
@@ -930,7 +982,7 @@
                                 <input type="text" id="mcpCommand" placeholder="node server.js" />
                             </div>
                         </div>
-                        <div class="form-row">
+                        <div class="form-row" id="claudeCodeScopeRow">
                             <div class="form-group">
                                 <label>Scope</label>
                                 <select id="mcpScope">
@@ -947,8 +999,16 @@
                             </div>
                             <button class="btn" onclick="addMcpServer()">Add MCP Server</button>
                         </div>
+                        <div class="form-row" id="claudeDesktopRow" style="display: none;">
+                            <button class="btn" onclick="addMcpServer()">Add to Claude Desktop</button>
+                        </div>
                     </div>
-                    <div id="mcpServers">Loading...</div>
+
+                    <!-- MCP Servers Display -->
+                    <div id="mcpServersContainer">
+                        <div id="mcpServers">Loading...</div>
+                        <div id="claudeDesktopMcpServers" style="display: none;">Loading...</div>
+                    </div>
                 </div>
             </div>
 
@@ -964,6 +1024,8 @@
     <script>
         let ws;
         let data = {};
+        let mcpTemplates = {};
+        let currentMcpTarget = 'claude-code'; // 'claude-code' or 'claude-desktop'
 
         function connect() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -1070,6 +1132,106 @@
                     '~/.claude/CLAUDE.md',
                     true
                 );
+            }
+        }
+
+        // MCP Target Management
+        function switchMcpTarget(target) {
+            currentMcpTarget = target;
+            
+            // Update tab appearance
+            document.getElementById('claudeCodeTab').classList.toggle('active', target === 'claude-code');
+            document.getElementById('claudeDesktopTab').classList.toggle('active', target === 'claude-desktop');
+            
+            // Show/hide appropriate forms and content
+            document.getElementById('claudeCodeScopeRow').style.display = target === 'claude-code' ? 'flex' : 'none';
+            document.getElementById('claudeDesktopRow').style.display = target === 'claude-desktop' ? 'flex' : 'none';
+            
+            // Show/hide appropriate server lists
+            document.getElementById('mcpServers').style.display = target === 'claude-code' ? 'block' : 'none';
+            document.getElementById('claudeDesktopMcpServers').style.display = target === 'claude-desktop' ? 'block' : 'none';
+            
+            // Load appropriate server list
+            if (target === 'claude-desktop') {
+                updateClaudeDesktopMcpServers();
+            } else {
+                updateMcpServers();
+            }
+        }
+
+        function updateClaudeDesktopMcpServers() {
+            fetch('/api/claude-desktop-mcp-servers')
+                .then(response => response.json())
+                .then(servers => {
+                    const container = document.getElementById('claudeDesktopMcpServers');
+                    
+                    if (servers.error) {
+                        container.innerHTML = `<div class="config-file error">Error: ${servers.error}</div>`;
+                        return;
+                    }
+
+                    if (Object.keys(servers).length === 0) {
+                        container.innerHTML = '<div class="empty-state">No Claude Desktop MCP servers configured</div>';
+                        return;
+                    }
+
+                    const serversList = Object.entries(servers).map(([name, config]) => {
+                        const commandDisplay = `${config.command} ${config.args ? config.args.join(' ') : ''}`.trim();
+                        
+                        return `
+                            <div class="config-file">
+                                <div class="config-header">
+                                    <span class="config-title">${name}</span>
+                                    <div class="config-actions">
+                                        <button class="btn-small btn-danger" onclick="removeClaudeDesktopMcpServer('${name}')">Remove</button>
+                                    </div>
+                                </div>
+                                <div class="config-details">
+                                    <div class="detail-row">
+                                        <span class="detail-label">Command:</span>
+                                        <span class="detail-value">${commandDisplay}</span>
+                                    </div>
+                                    ${config.args && config.args.length > 0 ? `
+                                        <div class="detail-row">
+                                            <span class="detail-label">Arguments:</span>
+                                            <span class="detail-value">${config.args.join(', ')}</span>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+
+                    container.innerHTML = serversList;
+                })
+                .catch(error => {
+                    document.getElementById('claudeDesktopMcpServers').innerHTML = 
+                        `<div class="config-file error">Failed to load Claude Desktop MCP servers: ${error.message}</div>`;
+                });
+        }
+
+        async function removeClaudeDesktopMcpServer(name) {
+            if (!confirm(`Remove Claude Desktop MCP server "${name}"?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/remove-claude-desktop-mcp-server', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    alert(result.message || 'MCP server removed successfully');
+                    updateClaudeDesktopMcpServers();
+                } else {
+                    const error = await response.json();
+                    alert(`Error: ${error.error}`);
+                }
+            } catch (error) {
+                alert(`Error: ${error.message}`);
             }
         }
 
@@ -1522,10 +1684,10 @@
         async function loadTemplates() {
             try {
                 const response = await fetch('/api/mcp-templates');
-                templates = await response.json();
+                mcpTemplates = await response.json();
                 
                 const templateSelect = document.getElementById('mcpTemplate');
-                Object.entries(templates).forEach(([key, template]) => {
+                Object.entries(mcpTemplates).forEach(([key, template]) => {
                     const option = document.createElement('option');
                     option.value = key;
                     option.textContent = `${template.name} - ${template.description}`;
@@ -1554,8 +1716,8 @@
             // Clear existing parameter form
             clearMcpParameterForm();
             
-            if (templateKey && templates[templateKey]) {
-                const template = templates[templateKey];
+            if (templateKey && mcpTemplates[templateKey]) {
+                const template = mcpTemplates[templateKey];
                 nameInput.value = templateKey;
                 commandInput.value = template.command;
                 commandInput.disabled = true;
@@ -1880,7 +2042,8 @@
                 return;
             }
 
-            if (scope === 'project' && !projectPath) {
+            // For Claude Code target, check scope requirements
+            if (currentMcpTarget === 'claude-code' && scope === 'project' && !projectPath) {
                 alert('Please select a project for project scope');
                 return;
             }
@@ -1890,8 +2053,8 @@
             const envVars = {};
             let missingRequired = [];
 
-            if (template && templates[template]) {
-                const templateConfig = templates[template];
+            if (template && mcpTemplates[template]) {
+                const templateConfig = mcpTemplates[template];
                 
                 // Collect command parameters
                 if (templateConfig.parameters) {
@@ -1940,7 +2103,8 @@
                         template, 
                         projectPath, 
                         parameters, 
-                        envVars 
+                        envVars,
+                        target: currentMcpTarget
                     })
                 });
                 
@@ -1952,7 +2116,13 @@
                     document.getElementById('mcpTemplate').value = '';
                     clearMcpParameterForm();
                     onTemplateChange(); // Reset form
-                    refreshData();
+                    
+                    // Refresh appropriate server list
+                    if (currentMcpTarget === 'claude-desktop') {
+                        updateClaudeDesktopMcpServers();
+                    } else {
+                        refreshData();
+                    }
                 } else {
                     const error = await response.json();
                     alert(`Error: ${error.error}`);

@@ -550,10 +550,12 @@ class ClaudeManager {
     this.userEnvFile = path.join(this.registryPath, 'user.env');
     this.sessionTrackingFile = path.join(this.registryPath, 'session-tracking.json');
     this.settingsFile = path.join(this.registryPath, 'settings.json');
+    this.claudeDesktopConfigPath = path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
     this.state = {
       userConfig: {},
       projects: {},
       mcpServers: {},
+      claudeDesktopMcpServers: {},
       userEnvVars: {},
       projectEnvVars: {},
       settings: {
@@ -1049,6 +1051,7 @@ class ClaudeManager {
   async refreshAllData() {
     await this.refreshUserConfig();
     await this.refreshMcpServers();
+    await this.refreshClaudeDesktopMcpServers();
     await this.refreshUserEnvVars();
     
     for (const projectName of Object.keys(this.state.projects)) {
@@ -1057,6 +1060,132 @@ class ClaudeManager {
     }
     
     this.state.lastUpdate = Date.now();
+  }
+
+  // Claude Desktop MCP Management
+  async refreshClaudeDesktopMcpServers() {
+    try {
+      if (await fs.pathExists(this.claudeDesktopConfigPath)) {
+        const config = await fs.readJson(this.claudeDesktopConfigPath);
+        this.state.claudeDesktopMcpServers = config.mcpServers || {};
+      } else {
+        this.state.claudeDesktopMcpServers = {};
+      }
+    } catch (error) {
+      console.error('Error loading Claude Desktop MCP servers:', error.message);
+      this.state.claudeDesktopMcpServers = { error: error.message };
+    }
+  }
+
+  async saveClaudeDesktopConfig() {
+    try {
+      let config = {};
+      if (await fs.pathExists(this.claudeDesktopConfigPath)) {
+        config = await fs.readJson(this.claudeDesktopConfigPath);
+      }
+      
+      config.mcpServers = this.state.claudeDesktopMcpServers;
+      
+      // Ensure directory exists
+      await fs.ensureDir(path.dirname(this.claudeDesktopConfigPath));
+      await fs.writeJson(this.claudeDesktopConfigPath, config, { spaces: 2 });
+      
+      return { success: true };
+    } catch (error) {
+      throw new Error(`Failed to save Claude Desktop config: ${error.message}`);
+    }
+  }
+
+  convertMcpTemplateToDesktopFormat(template, parameters = {}, envVars = {}) {
+    const desktopConfig = {
+      command: 'npx',
+      args: []
+    };
+
+    // Parse the original command
+    if (template.command.startsWith('npx ')) {
+      const parts = template.command.split(' ');
+      desktopConfig.args = parts.slice(1); // Remove 'npx'
+    } else if (template.command.startsWith('uvx ')) {
+      desktopConfig.command = 'uvx';
+      const parts = template.command.split(' ');
+      desktopConfig.args = parts.slice(1); // Remove 'uvx'
+    } else {
+      // For other commands, split and use first as command
+      const parts = template.command.split(' ');
+      desktopConfig.command = parts[0];
+      desktopConfig.args = parts.slice(1);
+    }
+
+    // Substitute parameters in args
+    if (parameters && template.parameters) {
+      template.parameters.forEach(param => {
+        if (parameters[param.name]) {
+          desktopConfig.args = desktopConfig.args.map(arg => 
+            arg.replace(`{${param.name}}`, parameters[param.name])
+          );
+        }
+      });
+    }
+
+    // Add environment variables directly to args if needed
+    if (envVars && template.envVars) {
+      template.envVars.forEach(envVar => {
+        if (envVars[envVar.name]) {
+          // Some templates like Supabase need access tokens in args
+          if (envVar.name === 'SUPABASE_ACCESS_TOKEN' || template.name === 'Supabase') {
+            desktopConfig.args.push('--access-token', envVars[envVar.name]);
+          }
+          // Add other patterns as needed
+        }
+      });
+    }
+
+    return desktopConfig;
+  }
+
+  async addClaudeDesktopMcpServer(name, template, parameters = {}, envVars = {}) {
+    try {
+      if (!MCP_TEMPLATES[template]) {
+        throw new Error(`Template ${template} not found`);
+      }
+
+      const templateConfig = MCP_TEMPLATES[template];
+      const desktopConfig = this.convertMcpTemplateToDesktopFormat(templateConfig, parameters, envVars);
+      
+      // Load current config
+      await this.refreshClaudeDesktopMcpServers();
+      
+      // Add new server
+      if (this.state.claudeDesktopMcpServers.error) {
+        this.state.claudeDesktopMcpServers = {};
+      }
+      
+      this.state.claudeDesktopMcpServers[name] = desktopConfig;
+      
+      // Save config
+      await this.saveClaudeDesktopConfig();
+      
+      return { success: true, message: `${name} MCP server added to Claude Desktop` };
+    } catch (error) {
+      throw new Error(`Failed to add Claude Desktop MCP server: ${error.message}`);
+    }
+  }
+
+  async removeClaudeDesktopMcpServer(name) {
+    try {
+      await this.refreshClaudeDesktopMcpServers();
+      
+      if (this.state.claudeDesktopMcpServers[name]) {
+        delete this.state.claudeDesktopMcpServers[name];
+        await this.saveClaudeDesktopConfig();
+        return { success: true, message: `${name} MCP server removed from Claude Desktop` };
+      } else {
+        throw new Error(`MCP server ${name} not found in Claude Desktop config`);
+      }
+    } catch (error) {
+      throw new Error(`Failed to remove Claude Desktop MCP server: ${error.message}`);
+    }
   }
 
   // Environment Variables Management
@@ -1350,13 +1479,20 @@ class ClaudeManager {
     });
 
     this.app.post('/api/add-mcp-server', async (req, res) => {
-      const { name, command, scope, template, projectPath, parameters, envVars } = req.body;
+      const { name, command, scope, template, projectPath, parameters, envVars, target } = req.body;
       
       if (!name || (!command && !template)) {
         return res.status(400).json({ error: 'Name and command/template required' });
       }
 
       try {
+        // Handle Claude Desktop target
+        if (target === 'claude-desktop') {
+          const result = await this.addClaudeDesktopMcpServer(name, template, parameters, envVars);
+          return res.json(result);
+        }
+
+        // Handle Claude Code target (existing logic)
         let finalCommand = command;
         let installNeeded = false;
 
@@ -1616,6 +1752,38 @@ class ClaudeManager {
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
+    });
+
+    // Claude Desktop MCP API endpoints
+    this.app.get('/api/claude-desktop-mcp-servers', async (req, res) => {
+      try {
+        await this.refreshClaudeDesktopMcpServers();
+        res.json(this.state.claudeDesktopMcpServers);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/remove-claude-desktop-mcp-server', async (req, res) => {
+      const { name } = req.body;
+      
+      if (!name) {
+        return res.status(400).json({ error: 'Server name required' });
+      }
+
+      try {
+        const result = await this.removeClaudeDesktopMcpServer(name);
+        res.json(result);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/claude-desktop-config-path', (req, res) => {
+      res.json({ 
+        path: this.claudeDesktopConfigPath,
+        exists: fs.existsSync(this.claudeDesktopConfigPath)
+      });
     });
 
     this.server = this.app.listen(3456);
