@@ -57,41 +57,65 @@ fi
 
 # Get project info
 GIT_REMOTE="$(git remote get-url origin 2>/dev/null || echo 'none')"
-LANGUAGE="$([ -f package.json ] && echo 'node' || [ -f requirements.txt ] && echo 'python' || [ -f Cargo.toml ] && echo 'rust' || [ -f go.mod ] && echo 'go' || echo 'unknown')"
+# Fix language detection logic - use elif pattern
+if [ -f package.json ]; then
+    LANGUAGE="node"
+elif [ -f requirements.txt ]; then
+    LANGUAGE="python"
+elif [ -f Cargo.toml ]; then
+    LANGUAGE="rust"
+elif [ -f go.mod ]; then
+    LANGUAGE="go"
+else
+    LANGUAGE="unknown"
+fi
 TIMESTAMP=$(date +%s)000  # Milliseconds timestamp to match existing format
 
-# Add project to registry.json
-python3 -c "
+# Add project to registry.json using a temporary Python script
+cat > /tmp/cm-reg-update.py << 'EOF'
 import json
 import sys
+import os
 
-try:
-    with open('$REGISTRY_FILE', 'r') as f:
-        data = json.load(f)
+def main():
+    registry_file = sys.argv[1]
+    project_name = sys.argv[2]
+    current_dir = sys.argv[3]
+    timestamp = int(sys.argv[4])
+    git_remote = sys.argv[5]
+    language = sys.argv[6]
+    
+    try:
+        with open(registry_file, 'r') as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        data = {"projects": {}}
     
     # Ensure projects key exists and is an object
     if 'projects' not in data:
         data['projects'] = {}
     
     # Add the project as a key-value pair in the projects object
-    data['projects']['$PROJECT_NAME'] = {
-        'path': '$CURRENT_DIR',
-        'registeredAt': $TIMESTAMP,
-        'git_remote': '$GIT_REMOTE',
-        'language': '$LANGUAGE'
+    data['projects'][project_name] = {
+        'path': current_dir,
+        'registeredAt': timestamp,
+        'git_remote': git_remote,
+        'language': language
     }
     
     # Update lastUpdate timestamp
-    data['lastUpdate'] = $TIMESTAMP
+    data['lastUpdate'] = timestamp
     
-    with open('$REGISTRY_FILE', 'w') as f:
+    with open(registry_file, 'w') as f:
         json.dump(data, f, indent=2)
     
     print('SUCCESS')
-except Exception as e:
-    print(f'ERROR: {e}', file=sys.stderr)
-    sys.exit(1)
-"
+
+if __name__ == "__main__":
+    main()
+EOF
+
+python3 /tmp/cm-reg-update.py "$REGISTRY_FILE" "$PROJECT_NAME" "$CURRENT_DIR" "$TIMESTAMP" "$GIT_REMOTE" "$LANGUAGE"
 
 if [ $? -eq 0 ]; then
     log_success "Registered project '$PROJECT_NAME' at $CURRENT_DIR"

@@ -47,13 +47,6 @@
             gap: 1rem;
         }
 
-        .session-status {
-            background: #1f2937;
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            font-size: 0.875rem;
-            border: 1px solid #374151;
-        }
 
         .header-toggle {
             display: flex;
@@ -598,6 +591,14 @@
             background: #059669;
         }
 
+        .btn-small-env.info {
+            background: #3b82f6;
+        }
+
+        .btn-small-env.info:hover {
+            background: #2563eb;
+        }
+
         .project-env-section {
             margin-top: 1rem;
             padding: 1rem;
@@ -626,70 +627,6 @@
             background: #4b5563;
         }
 
-        /* Session Tracking Styles */
-        .session-stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin: 1rem 0;
-        }
-
-        .stat-card {
-            background: #1f2937;
-            border: 1px solid #374151;
-            border-radius: 4px;
-            padding: 1rem;
-        }
-
-        .stat-value {
-            font-size: 1.5rem;
-            font-weight: 600;
-            color: #f9fafb;
-            margin-bottom: 0.25rem;
-        }
-
-        .stat-label {
-            font-size: 0.875rem;
-            color: #9ca3af;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        .progress-bar {
-            width: 100%;
-            height: 8px;
-            background: #374151;
-            border-radius: 4px;
-            overflow: hidden;
-            margin-top: 0.5rem;
-        }
-
-        .progress-fill {
-            height: 100%;
-            transition: width 0.3s ease;
-        }
-
-        .progress-safe { background: #10b981; }
-        .progress-warning { background: #f59e0b; }
-        .progress-danger { background: #ef4444; }
-
-        .session-warning {
-            background: #fef3c7;
-            border: 1px solid #f59e0b;
-            color: #92400e;
-            padding: 0.75rem;
-            border-radius: 4px;
-            margin: 1rem 0;
-        }
-
-        .session-danger {
-            background: #fee2e2;
-            border: 1px solid #ef4444;
-            color: #991b1b;
-            padding: 0.75rem;
-            border-radius: 4px;
-            margin: 1rem 0;
-        }
 
         /* Modern Toggle Switch */
         .toggle-container {
@@ -772,6 +709,154 @@
             transform: translateY(0);
             box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);
         }
+
+        /* Slide-over Panel Styling */
+        .slide-panel {
+            position: fixed;
+            top: 0;
+            right: -400px;
+            width: 400px;
+            height: 100vh;
+            background: #1f2937;
+            border-left: 1px solid #374151;
+            transition: right 0.3s ease;
+            z-index: 1000;
+            overflow-y: auto;
+            box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .slide-panel.open {
+            right: 0;
+        }
+
+        .slide-panel-header {
+            background: #111827;
+            color: white;
+            padding: 1rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #374151;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .slide-panel-header h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .slide-panel-close {
+            background: none;
+            border: none;
+            color: #9ca3af;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+            transition: color 0.2s ease;
+        }
+
+        .slide-panel-close:hover {
+            color: white;
+        }
+
+        .slide-panel-content {
+            padding: 1.5rem;
+        }
+
+        .session-info-section {
+            background: #111827;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .session-info-section h3 {
+            font-size: 0.875rem;
+            color: #9ca3af;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .session-stat {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #374151;
+        }
+
+        .session-stat:last-child {
+            border-bottom: none;
+        }
+
+        .session-stat-label {
+            color: #e5e7eb;
+            font-size: 0.875rem;
+        }
+
+        .session-stat-value {
+            color: #10b981;
+            font-weight: 600;
+            font-family: 'SF Mono', Monaco, monospace;
+        }
+
+        .billing-date-picker {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .billing-date-picker select {
+            background: #374151;
+            color: white;
+            border: 1px solid #4b5563;
+            padding: 0.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .plan-limits {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .plan-limit {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.875rem;
+            color: #9ca3af;
+        }
+
+        .plan-limit.active {
+            color: #e5e7eb;
+            font-weight: 500;
+        }
+
+        /* Overlay for panel */
+        .panel-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+            display: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .panel-overlay.show {
+            display: block;
+            opacity: 1;
+        }
     </style>
 </head>
 <body>
@@ -797,47 +882,28 @@
             Claude Manager Dashboard
         </h1>
         <div class="header-controls">
-            <div id="sessionStatusHeader" class="session-status" style="display: none;">
-                Session ends in <span id="sessionTimeRemaining">--</span>
+            <div id="sessionTrackingContainer" style="display: flex; align-items: center; gap: 1.5rem;">
+                <div id="sessionCountdown" style="display: none; font-size: 0.875rem; color: #10b981;">
+                    <span style="font-weight: 600;">Session Active:</span>
+                    <span id="countdownTimer" style="font-family: 'SF Mono', Monaco, monospace;">00:00:00</span>
+                </div>
+                <div class="header-toggle">
+                    <span>Session Tracking</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="sessionTrackingToggle" onchange="toggleSessionTracking(this.checked)">
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <button onclick="toggleSessionDetailsPanel()" style="background: none; border: none; cursor: pointer; color: #9ca3af; padding: 0.25rem;" title="Session Details">
+                        ℹ️
+                    </button>
+                </div>
             </div>
-            <div class="header-toggle">
-                <span>Session Tracking</span>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="headerSessionTrackingEnabled" onchange="toggleSessionTracking()" />
-                    <span class="toggle-slider"></span>
-                </label>
-            </div>
-            <button class="settings-cog" onclick="toggleSettingsPanel()" title="Session Settings">
+            <button class="settings-cog" onclick="toggleSettingsPanel()" title="Settings">
                 ⚙️
             </button>
         </div>
     </div>
 
-    <!-- Settings Panel -->
-    <div class="settings-panel" id="settingsPanel">
-        <div class="settings-header">
-            <h3>Session Tracking Settings</h3>
-            <button class="settings-close" onclick="toggleSettingsPanel()">×</button>
-        </div>
-        <div class="settings-content">
-            <div class="form-group" style="margin-bottom: 1rem;">
-                <label>Plan Type</label>
-                <select id="planType" onchange="updateSessionConfig()" style="width: 100%; padding: 0.5rem; border-radius: 4px; border: 1px solid #4b5563; background: #374151; color: #e5e7eb;">
-                    <option value="pro">Pro ($20/month - 45 messages/5h)</option>
-                    <option value="max-5x">Max 5x ($100/month - 225 messages/5h)</option>
-                    <option value="max-20x">Max 20x ($200/month - 900 messages/5h)</option>
-                </select>
-            </div>
-            <div class="form-group" style="margin-bottom: 1rem;">
-                <label>Billing Period Start</label>
-                <input type="date" id="billingPeriodStart" onchange="updateSessionConfig()" style="width: 100%; padding: 0.5rem; border-radius: 4px; border: 1px solid #4b5563; background: #374151; color: #e5e7eb;" />
-            </div>
-            <div id="sessionStats" class="config-file">Loading...</div>
-            <div style="margin-top: 1rem;">
-                <button class="btn-modern" onclick="clearSessionData()">🗑️ Clear Session Data</button>
-            </div>
-        </div>
-    </div>
 
     <div class="container">
         <button class="refresh-button" onclick="refreshData()">🔄 Refresh All Data</button>
@@ -1042,6 +1108,8 @@
                     updateUI();
                 } else if (message.type === 'fileChange') {
                     refreshData();
+                } else if (message.type === 'sessionTracking' || message.type === 'sessionCountdown') {
+                    updateSessionCountdown(message.data);
                 }
             };
 
@@ -1078,7 +1146,6 @@
         function updateUI() {
             updateUserConfig();
             updateUserHooks();
-            updateSessionTracking();
             updateUserEnvVars();
             updateMcpServers();
             updateProjectConfigs();
@@ -1354,6 +1421,10 @@
                                 <div class="env-var-info">
                                     <div class="env-var-name">${escapeHtml(key)} ${label}</div>
                                     <div class="env-var-value">***** (hidden for security)</div>
+                                </div>
+                                <div class="env-var-actions">
+                                    <button class="btn-small-env info" onclick="copyEnvToUser('${escapeHtml(name)}', '${escapeHtml(key)}')">Copy to User</button>
+                                    <button class="btn-small-env danger" onclick="deleteEnvFromProject('${escapeHtml(name)}', '${escapeHtml(key)}')">Remove</button>
                                 </div>
                             </div>
                         `;
@@ -1675,6 +1746,49 @@
                 }
             };
             document.addEventListener('keydown', escapeHandler);
+        }
+
+        async function deleteEnvFromProject(projectName, key) {
+            if (!confirm(`Remove environment variable "${key}" from project "${projectName}"?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/delete-env-from-project', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ projectName, key })
+                });
+                
+                if (response.ok) {
+                    refreshData();
+                } else {
+                    const error = await response.json();
+                    alert(`Error: ${error.error}`);
+                }
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        async function copyEnvToUser(projectName, key) {
+            try {
+                const response = await fetch('/api/copy-env-to-user', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ projectName, key })
+                });
+                
+                if (response.ok) {
+                    refreshData();
+                    alert(`Environment variable "${key}" copied to user level`);
+                } else {
+                    const error = await response.json();
+                    alert(`Error: ${error.error}`);
+                }
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
         }
 
         // Load templates, projects, and hooks
@@ -2187,276 +2301,120 @@
             }
         }
 
+
         // Session Tracking Functions
-        function updateSessionTracking() {
-            const headerEnabledCheckbox = document.getElementById('headerSessionTrackingEnabled');
-            const planTypeSelect = document.getElementById('planType');
-            const billingPeriodInput = document.getElementById('billingPeriodStart');
-            const statsContainer = document.getElementById('sessionStats');
-            
-            if (data.sessionTracking) {
-                headerEnabledCheckbox.checked = data.sessionTracking.enabled;
-                planTypeSelect.value = data.sessionTracking.planType || 'pro';
-                
-                // Set billing period to today if not set
-                const billingPeriod = data.sessionTracking.billingPeriodStart || new Date().toISOString().slice(0, 10);
-                billingPeriodInput.value = billingPeriod;
-                
-                // Fetch and display session stats
-                fetchSessionStats();
-                
-                // Update session countdown if active
-                updateSessionCountdown();
-            } else {
-                // Set default values for first-time users
-                planTypeSelect.value = 'pro';
-                billingPeriodInput.value = new Date().toISOString().slice(0, 10);
-                statsContainer.innerHTML = '<div class="empty-state">Session tracking not configured</div>';
-            }
-        }
+        let sessionCountdownInterval = null;
 
-        async function fetchSessionStats() {
-            try {
-                const response = await fetch('/api/session-stats');
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                const stats = await response.json();
-                displaySessionStats(stats);
-            } catch (error) {
-                console.error('Failed to fetch session stats:', error);
-                const container = document.getElementById('sessionStats');
-                if (error.name === 'SyntaxError') {
-                    container.innerHTML = '<div class="config-file error">Invalid server response - please refresh the page</div>';
-                } else {
-                    container.innerHTML = `<div class="config-file error">Failed to load session stats: ${error.message}</div>`;
-                }
-            }
-        }
-
-        function displaySessionStats(stats) {
-            const container = document.getElementById('sessionStats');
-            
-            if (!stats || !stats.tracking || !stats.tracking.enabled) {
-                container.innerHTML = '<div class="empty-state">Session tracking is disabled</div>';
-                return;
-            }
-
-            // Safely access nested properties with defaults
-            const usage = stats.usage || {};
-            const limits = stats.limits || {};
-            const tracking = stats.tracking || {};
-            const sessionStats = stats.stats || {};
-
-            const progress = (usage.monthlyProgress || 0) * 100;
-            const progressClass = progress >= 90 ? 'progress-danger' : progress >= 70 ? 'progress-warning' : 'progress-safe';
-            
-            let warningMessage = '';
-            if (progress >= 90) {
-                warningMessage = '<div class="session-danger">⚠️ Warning: You\'re approaching your monthly session limit!</div>';
-            } else if (progress >= 70) {
-                warningMessage = '<div class="session-warning">⚠️ Caution: You\'ve used 70% of your monthly sessions</div>';
-            }
-
-            const formatDuration = (seconds) => {
-                const hours = Math.floor(seconds / 3600);
-                const minutes = Math.floor((seconds % 3600) / 60);
-                return `${hours}h ${minutes}m`;
-            };
-
-            const formatDate = (dateStr) => {
-                if (!dateStr) return 'Not set';
-                return new Date(dateStr).toLocaleDateString();
-            };
-
-            container.innerHTML = `
-                ${warningMessage}
-                <div class="session-stats">
-                    <div class="stat-card">
-                        <div class="stat-value">${sessionStats.sessionsCount || 0}</div>
-                        <div class="stat-label">Sessions This Period</div>
-                        <div class="progress-bar">
-                            <div class="progress-fill ${progressClass}" style="width: ${Math.min(progress, 100)}%"></div>
-                        </div>
-                        <div style="font-size: 0.75rem; color: #6b7280; margin-top: 0.25rem;">
-                            ${Math.round(progress)}% of ${limits.monthlySessions || 50} sessions
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value">${formatDuration(sessionStats.totalDuration || 0)}</div>
-                        <div class="stat-label">Total Duration</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value">${sessionStats.activeSessions || 0}</div>
-                        <div class="stat-label">Active Sessions</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value">${usage.estimatedMonthlyUsage || 0}</div>
-                        <div class="stat-label">Estimated Monthly</div>
-                        <div style="font-size: 0.75rem; color: #6b7280; margin-top: 0.25rem;">
-                            Based on current usage pattern
-                        </div>
-                    </div>
-                </div>
-                <div style="margin-top: 1rem; padding: 1rem; background: #1f2937; border-radius: 4px; font-size: 0.875rem;">
-                    <div><strong>Plan:</strong> ${(tracking.planType || 'pro').toUpperCase()} (${limits.codePrompts5h || '10-40'} prompts per 5-hour window)</div>
-                    <div><strong>Billing Period:</strong> ${formatDate(tracking.billingPeriodStart)} - ${formatDate(new Date(Date.now() + 30*24*60*60*1000).toISOString().slice(0, 10))}</div>
-                    <div><strong>Time in Period:</strong> ${Math.round((usage.timeInCurrentPeriod || 0) * 100)}% elapsed</div>
-                </div>
-            `;
-        }
-
-        async function toggleSessionTracking() {
-            const enabled = document.getElementById('headerSessionTrackingEnabled').checked;
-            
-            // If enabling and billing period is not set, set it to today
-            if (enabled) {
-                const billingPeriodInput = document.getElementById('billingPeriodStart');
-                if (!billingPeriodInput.value) {
-                    billingPeriodInput.value = new Date().toISOString().slice(0, 10);
-                    // Update the config with the new date
-                    await updateSessionConfig();
-                }
-            }
-            
+        async function toggleSessionTracking(enabled) {
             try {
                 const response = await fetch('/api/toggle-session-tracking', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ enabled })
                 });
-                
-                if (response.ok) {
-                    refreshData();
-                    updateSessionCountdown(); // Update countdown immediately after toggling
-                    if (enabled) {
-                        alert('✅ Session tracking enabled! Claude Code will now track session duration and usage.');
-                    } else {
-                        alert('❌ Session tracking disabled. Hooks have been removed from your Claude settings.');
-                    }
-                } else {
-                    const error = await response.json();
-                    alert(`Error: ${error.error}`);
-                    // Revert checkbox state
-                    document.getElementById('headerSessionTrackingEnabled').checked = !enabled;
+                const result = await response.json();
+                if (!result.success) {
+                    throw new Error(result.error || 'Failed to toggle session tracking');
                 }
             } catch (error) {
+                console.error('Error toggling session tracking:', error);
+                document.getElementById('sessionTrackingToggle').checked = !enabled;
                 alert(`Error: ${error.message}`);
-                // Revert checkbox state
-                document.getElementById('headerSessionTrackingEnabled').checked = !enabled;
             }
         }
 
-        async function updateSessionConfig() {
-            const planType = document.getElementById('planType').value;
-            const billingPeriodStart = document.getElementById('billingPeriodStart').value;
+        function toggleSessionDetailsPanel() {
+            const panel = document.getElementById('sessionDetailsPanel');
+            const overlay = document.getElementById('panelOverlay');
             
+            if (panel.classList.contains('open')) {
+                panel.classList.remove('open');
+                overlay.classList.remove('show');
+                setTimeout(() => overlay.style.display = 'none', 300);
+            } else {
+                overlay.style.display = 'block';
+                setTimeout(() => {
+                    overlay.classList.add('show');
+                    panel.classList.add('open');
+                }, 10);
+                updateSessionDetails();
+            }
+        }
+
+        function closeSessionDetailsPanel() {
+            const panel = document.getElementById('sessionDetailsPanel');
+            const overlay = document.getElementById('panelOverlay');
+            panel.classList.remove('open');
+            overlay.classList.remove('show');
+            setTimeout(() => overlay.style.display = 'none', 300);
+        }
+
+        async function updateSessionDetails() {
             try {
-                const response = await fetch('/api/update-session-config', {
+                const response = await fetch('/api/session-status');
+                const data = await response.json();
+                
+                document.getElementById('monthlySessionCount').textContent = data.monthlySessions || 0;
+                document.getElementById('billingDateSelect').value = data.billingDate || 1;
+                
+                // Update plan limits display
+                const planLimits = document.querySelectorAll('.plan-limit');
+                planLimits.forEach(el => el.classList.remove('active'));
+                
+                // Highlight based on session count
+                if (data.monthlySessions <= 45) {
+                    document.querySelector('[data-plan="pro"]').classList.add('active');
+                } else if (data.monthlySessions <= 225) {
+                    document.querySelector('[data-plan="max-5x"]').classList.add('active');
+                } else if (data.monthlySessions <= 900) {
+                    document.querySelector('[data-plan="max-20x"]').classList.add('active');
+                }
+            } catch (error) {
+                console.error('Error updating session details:', error);
+            }
+        }
+
+        async function changeBillingDate(date) {
+            try {
+                const response = await fetch('/api/set-billing-date', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ planType, billingPeriodStart })
+                    body: JSON.stringify({ billingDate: parseInt(date) })
                 });
-                
-                if (response.ok) {
-                    refreshData();
-                } else {
-                    const error = await response.json();
-                    alert(`Error: ${error.error}`);
+                const result = await response.json();
+                if (!result.success) {
+                    throw new Error(result.error || 'Failed to update billing date');
                 }
+                updateSessionDetails();
             } catch (error) {
+                console.error('Error changing billing date:', error);
                 alert(`Error: ${error.message}`);
             }
         }
 
-        async function clearSessionData() {
-            if (!confirm('Are you sure you want to clear all session tracking data? This cannot be undone.')) {
-                return;
+        function updateSessionCountdown(stats) {
+            const countdownDiv = document.getElementById('sessionCountdown');
+            const timerSpan = document.getElementById('countdownTimer');
+            
+            if (stats.enabled && stats.isActive && stats.timeRemaining) {
+                countdownDiv.style.display = 'block';
+                const hours = Math.floor(stats.timeRemaining / (1000 * 60 * 60));
+                const minutes = Math.floor((stats.timeRemaining % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((stats.timeRemaining % (1000 * 60)) / 1000);
+                timerSpan.textContent = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            } else {
+                countdownDiv.style.display = 'none';
             }
             
-            try {
-                const response = await fetch('/api/clear-session-data', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                
-                if (response.ok) {
-                    alert('Session data cleared successfully');
-                    refreshData();
-                } else {
-                    const error = await response.json();
-                    alert(`Error: ${error.error}`);
-                }
-            } catch (error) {
-                alert(`Error: ${error.message}`);
-            }
+            // Update toggle state
+            document.getElementById('sessionTrackingToggle').checked = stats.enabled;
         }
 
-        // Settings Panel Functions
         function toggleSettingsPanel() {
-            const panel = document.getElementById('settingsPanel');
-            panel.classList.toggle('open');
+            // Placeholder for settings panel functionality
+            alert('Settings panel not yet implemented');
         }
 
-        // Session Countdown Functions
-        async function updateSessionCountdown() {
-            if (!data.sessionTracking || !data.sessionTracking.enabled) {
-                document.getElementById('sessionStatusHeader').style.display = 'none';
-                return;
-            }
-            
-            try {
-                // Fetch countdown info from the backend
-                const response = await fetch('/api/countdown');
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                
-                const countdown = await response.json();
-                
-                if (countdown.hasActiveSession && countdown.timeRemaining > 0) {
-                    const hours = countdown.hours;
-                    const minutes = countdown.minutes;
-                    const seconds = countdown.seconds;
-                    
-                    // Format the display based on time remaining
-                    let timeDisplay;
-                    if (hours > 0) {
-                        timeDisplay = `${hours}h ${minutes}m`;
-                    } else if (minutes > 0) {
-                        timeDisplay = `${minutes}m ${seconds}s`;
-                    } else {
-                        timeDisplay = `${seconds}s`;
-                    }
-                    
-                    document.getElementById('sessionTimeRemaining').textContent = timeDisplay;
-                    document.getElementById('sessionStatusHeader').style.display = 'block';
-                    
-                    // Show additional info if available
-                    const statusHeader = document.getElementById('sessionStatusHeader');
-                    statusHeader.title = `Session started: ${new Date(countdown.sessionStart).toLocaleTimeString()}\nProject: ${countdown.project || 'Unknown'}`;
-                    
-                    // Change color when time is running low
-                    if (countdown.timeRemaining < 30 * 60 * 1000) { // Less than 30 minutes
-                        statusHeader.style.backgroundColor = '#dc2626'; // Red
-                        statusHeader.style.color = 'white';
-                    } else if (countdown.timeRemaining < 60 * 60 * 1000) { // Less than 1 hour
-                        statusHeader.style.backgroundColor = '#f59e0b'; // Yellow/orange
-                        statusHeader.style.color = 'white';
-                    } else {
-                        statusHeader.style.backgroundColor = '#1f2937'; // Default
-                        statusHeader.style.color = '#e5e7eb';
-                    }
-                } else {
-                    // Hide if no active sessions
-                    document.getElementById('sessionStatusHeader').style.display = 'none';
-                }
-            } catch (error) {
-                console.error('Failed to fetch countdown info:', error);
-                // Fallback to hiding the countdown on error
-                document.getElementById('sessionStatusHeader').style.display = 'none';
-            }
-        }
 
         // Initialize
         connect();
@@ -2464,9 +2422,91 @@
         loadCommonHooks();
         refreshData();
         
-        // Start session countdown timer
-        updateSessionCountdown(); // Call immediately
-        setInterval(updateSessionCountdown, 10000); // Update every 10 seconds for better accuracy
+        // Check initial session tracking state
+        fetch('/api/session-stats')
+            .then(res => res.json())
+            .then(stats => updateSessionCountdown(stats))
+            .catch(console.error);
     </script>
+
+    <!-- Session Details Panel -->
+    <div id="panelOverlay" class="panel-overlay" onclick="closeSessionDetailsPanel()"></div>
+    <div id="sessionDetailsPanel" class="slide-panel">
+        <div class="slide-panel-header">
+            <h2>Session Tracking Details</h2>
+            <button class="slide-panel-close" onclick="closeSessionDetailsPanel()">✕</button>
+        </div>
+        <div class="slide-panel-content">
+            <div class="session-info-section">
+                <h3>Current Month</h3>
+                <div class="session-stat">
+                    <span class="session-stat-label">Sessions Used</span>
+                    <span class="session-stat-value" id="monthlySessionCount">0</span>
+                </div>
+                <div class="session-stat">
+                    <span class="session-stat-label">Billing Date</span>
+                    <div class="billing-date-picker">
+                        <select id="billingDateSelect" onchange="changeBillingDate(this.value)">
+                            <option value="1">1st</option>
+                            <option value="2">2nd</option>
+                            <option value="3">3rd</option>
+                            <option value="4">4th</option>
+                            <option value="5">5th</option>
+                            <option value="6">6th</option>
+                            <option value="7">7th</option>
+                            <option value="8">8th</option>
+                            <option value="9">9th</option>
+                            <option value="10">10th</option>
+                            <option value="11">11th</option>
+                            <option value="12">12th</option>
+                            <option value="13">13th</option>
+                            <option value="14">14th</option>
+                            <option value="15">15th</option>
+                            <option value="16">16th</option>
+                            <option value="17">17th</option>
+                            <option value="18">18th</option>
+                            <option value="19">19th</option>
+                            <option value="20">20th</option>
+                            <option value="21">21st</option>
+                            <option value="22">22nd</option>
+                            <option value="23">23rd</option>
+                            <option value="24">24th</option>
+                            <option value="25">25th</option>
+                            <option value="26">26th</option>
+                            <option value="27">27th</option>
+                            <option value="28">28th</option>
+                        </select>
+                        <span style="color: #9ca3af; font-size: 0.75rem;">of each month</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="session-info-section">
+                <h3>Plan Limits</h3>
+                <div class="plan-limits">
+                    <div class="plan-limit" data-plan="pro">
+                        <span>Pro</span>
+                        <span>45 sessions/month</span>
+                    </div>
+                    <div class="plan-limit" data-plan="max-5x">
+                        <span>Max 5x</span>
+                        <span>225 sessions/month</span>
+                    </div>
+                    <div class="plan-limit" data-plan="max-20x">
+                        <span>Max 20x</span>
+                        <span>900 sessions/month</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="session-info-section">
+                <h3>About Sessions</h3>
+                <p style="color: #9ca3af; font-size: 0.875rem; line-height: 1.5;">
+                    A session is a 5-hour window that starts when you send your first message to Claude. 
+                    All activity across any Claude Code project during this 5-hour period counts as a single session.
+                </p>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

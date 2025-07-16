@@ -97,6 +97,8 @@ cm-unreg my-project-name  # Unregister specific project
 - `POST /api/add-user-env` - Save user-level env var
 - `POST /api/delete-user-env` - Delete user env var  
 - `POST /api/add-env-to-project` - Add env var to project
+- `POST /api/delete-env-from-project` - Remove env var from project
+- `POST /api/copy-env-to-user` - Copy project env var to user level
 
 ## File Structure
 

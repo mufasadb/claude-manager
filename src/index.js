@@ -548,9 +548,10 @@ class ClaudeManager {
     this.registryFile = path.join(this.registryPath, 'registry.json');
     this.cachePath = path.join(this.registryPath, 'cache');
     this.userEnvFile = path.join(this.registryPath, 'user.env');
-    this.sessionTrackingFile = path.join(this.registryPath, 'session-tracking.json');
     this.settingsFile = path.join(this.registryPath, 'settings.json');
+    this.sessionTrackingFile = path.join(this.registryPath, 'session-tracking.json');
     this.claudeDesktopConfigPath = path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
+    this.claudeProjectsPath = path.join(os.homedir(), '.claude', 'projects');
     this.state = {
       userConfig: {},
       projects: {},
@@ -558,31 +559,25 @@ class ClaudeManager {
       claudeDesktopMcpServers: {},
       userEnvVars: {},
       projectEnvVars: {},
-      settings: {
-        sessionTracking: {
-          enabled: false,
-          billingPeriodStart: null,
-          planType: 'pro' // pro, max-5x, max-20x
-        }
-      },
+      settings: {},
       sessionTracking: {
         enabled: false,
-        billingPeriodStart: null,
-        planType: 'pro', // pro, max-5x, max-20x
-        sessions: [],
-        currentMonth: {
-          sessionsCount: 0,
-          totalDuration: 0
-        }
+        currentSessionStart: null,
+        billingDate: 1, // Default to 1st of the month
+        monthlySessions: 0,
+        lastScannedTimestamp: null,
+        sessionHistory: []
       },
       lastUpdate: Date.now()
     };
+    this.sessionCountdownInterval = null;
   }
 
   async init() {
     await this.ensureDirectories();
     await this.loadRegistry();
     this.setupFileWatchers();
+    await this.setupSessionWatcher();
     this.setupWebServer();
     await this.refreshAllData();
     console.log('🚀 Claude Manager started on http://localhost:3456');
@@ -600,22 +595,20 @@ class ClaudeManager {
         this.state.projects = data.projects || {};
       }
       
-      // Load session tracking data
-      if (await fs.pathExists(this.sessionTrackingFile)) {
-        const trackingData = await fs.readJson(this.sessionTrackingFile);
-        this.state.sessionTracking = { ...this.state.sessionTracking, ...trackingData };
-      }
-      
       // Load persistent settings
       if (await fs.pathExists(this.settingsFile)) {
         const settings = await fs.readJson(this.settingsFile);
         this.state.settings = { ...this.state.settings, ...settings };
+      }
+
+      // Load session tracking data
+      if (await fs.pathExists(this.sessionTrackingFile)) {
+        const sessionData = await fs.readJson(this.sessionTrackingFile);
+        this.state.sessionTracking = { ...this.state.sessionTracking, ...sessionData };
         
-        // Sync session tracking settings
-        if (settings.sessionTracking) {
-          this.state.sessionTracking.enabled = settings.sessionTracking.enabled;
-          this.state.sessionTracking.planType = settings.sessionTracking.planType || 'pro';
-          this.state.sessionTracking.billingPeriodStart = settings.sessionTracking.billingPeriodStart;
+        // Start countdown interval if tracking is enabled and we have an active session
+        if (this.state.sessionTracking.enabled && this.state.sessionTracking.currentSessionStart) {
+          this.startSessionCountdown();
         }
       }
     } catch (error) {
@@ -631,275 +624,20 @@ class ClaudeManager {
     }, { spaces: 2 });
   }
 
+
+  async saveSettings() {
+    await fs.writeJson(this.settingsFile, this.state.settings, { spaces: 2 });
+  }
+
   async saveSessionTracking() {
     await fs.writeJson(this.sessionTrackingFile, this.state.sessionTracking, { spaces: 2 });
   }
 
-  async saveSettings() {
-    // Update settings with current session tracking state
-    this.state.settings.sessionTracking = {
-      enabled: this.state.sessionTracking.enabled,
-      planType: this.state.sessionTracking.planType,
-      billingPeriodStart: this.state.sessionTracking.billingPeriodStart
-    };
-    
-    await fs.writeJson(this.settingsFile, this.state.settings, { spaces: 2 });
-  }
-
-  // Session tracking methods
-  async toggleSessionTracking(enabled) {
-    this.state.sessionTracking.enabled = enabled;
-    
-    if (enabled && !this.state.sessionTracking.billingPeriodStart) {
-      // Set billing period start to current date if not set
-      this.state.sessionTracking.billingPeriodStart = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-    }
-    
-    // Update user's Claude settings to include/remove session tracking hooks
-    await this.updateSessionTrackingHooks(enabled);
-    await this.saveSessionTracking();
-    await this.saveSettings(); // Save persistent settings
-    
-    return { success: true, enabled };
-  }
-
-  async updateSessionTrackingHooks(enabled) {
-    const userSettingsPath = path.join(os.homedir(), '.claude', 'settings.json');
-    
-    try {
-      let settings = {};
-      if (await fs.pathExists(userSettingsPath)) {
-        settings = await fs.readJson(userSettingsPath);
-      }
-      
-      if (!settings.hooks) settings.hooks = {};
-      
-      if (enabled) {
-        // Add session tracking hooks
-        settings.hooks.Start = settings.hooks.Start || [];
-        settings.hooks.Stop = settings.hooks.Stop || [];
-        
-        // Remove existing tracking hooks first
-        settings.hooks.Start = settings.hooks.Start.filter(hook => 
-          !hook.hooks?.[0]?.command?.includes('session-event')
-        );
-        settings.hooks.Stop = settings.hooks.Stop.filter(hook => 
-          !hook.hooks?.[0]?.command?.includes('session-event')
-        );
-        
-        // Add session start tracking hook
-        settings.hooks.Start.push({
-          matcher: '*',
-          hooks: [{
-            type: 'command',
-            command: 'curl -s -X POST http://localhost:3456/api/session-event -H "Content-Type: application/json" -d "{\\"event\\": \\"start\\", \\"timestamp\\": $(date +%s), \\"project\\": \\"$(pwd)\\"}" || true'
-          }]
-        });
-        
-        // Note: We don't track Stop events anymore since Claude sessions are time-based (5 hours)
-        // Sessions automatically end after 5 hours regardless of activity
-      } else {
-        // Remove session tracking hooks
-        if (settings.hooks.Start) {
-          settings.hooks.Start = settings.hooks.Start.filter(hook => 
-            !hook.hooks?.[0]?.command?.includes('session-event')
-          );
-        }
-        if (settings.hooks.Stop) {
-          settings.hooks.Stop = settings.hooks.Stop.filter(hook => 
-            !hook.hooks?.[0]?.command?.includes('session-event')
-          );
-        }
-      }
-      
-      await fs.ensureDir(path.dirname(userSettingsPath));
-      await fs.writeJson(userSettingsPath, settings, { spaces: 2 });
-      
-    } catch (error) {
-      console.error('Error updating session tracking hooks:', error.message);
-      throw error;
-    }
-  }
-
-  async recordSessionEvent(event, timestamp, project) {
-    if (!this.state.sessionTracking.enabled) return;
-    
-    const currentTime = parseInt(timestamp);
-    const currentTimeMs = currentTime * 1000;
-    
-    // Only track 'start' events as potential session starts
-    if (event === 'start') {
-      // Check if this is a new session (no recent activity in last 5 hours)
-      const recentSessions = this.state.sessionTracking.sessions.filter(s => 
-        s.event === 'session_start' && 
-        (currentTime - s.timestamp) < (5 * 60 * 60) // Within last 5 hours
-      );
-      
-      // If no recent session, this is a new session start
-      if (recentSessions.length === 0) {
-        const session = {
-          event: 'session_start',
-          timestamp: currentTime,
-          project,
-          date: new Date(currentTimeMs).toISOString(),
-          sessionId: `session_${currentTime}` // Unique session identifier
-        };
-        
-        this.state.sessionTracking.sessions.push(session);
-        
-        // Calculate monthly stats
-        this.calculateMonthlyStats();
-        
-        await this.saveSessionTracking();
-        this.broadcast({ 
-          type: 'sessionEvent', 
-          session, 
-          stats: this.state.sessionTracking.currentMonth,
-          message: 'New Claude Code session started'
-        });
-        
-        console.log(`📅 New Claude Code session started at ${new Date(currentTimeMs).toLocaleString()}`);
-      }
-    }
-    
-    // For 'end' events, we ignore them since Claude sessions are time-based, not tool-use based
-    // Sessions automatically end after 5 hours regardless of activity
-  }
-
-  calculateMonthlyStats() {
-    const billingStart = new Date(this.state.sessionTracking.billingPeriodStart);
-    const billingEnd = new Date(billingStart);
-    billingEnd.setMonth(billingEnd.getMonth() + 1);
-    
-    // Filter sessions in current billing period
-    const currentSessions = this.state.sessionTracking.sessions.filter(session => {
-      const sessionDate = new Date(session.timestamp * 1000);
-      return sessionDate >= billingStart && sessionDate < billingEnd && session.event === 'session_start';
-    });
-    
-    const now = Date.now() / 1000; // Current time in seconds
-    const sessionDuration = 5 * 60 * 60; // 5 hours in seconds
-    
-    // Calculate active sessions (started within last 5 hours)
-    const activeSessions = currentSessions.filter(session => {
-      const sessionAge = now - session.timestamp;
-      return sessionAge < sessionDuration; // Still within 5-hour window
-    });
-    
-    // All sessions are 5 hours long (or ongoing)
-    const completedSessions = currentSessions.filter(session => {
-      const sessionAge = now - session.timestamp;
-      return sessionAge >= sessionDuration; // Completed 5-hour sessions
-    });
-    
-    this.state.sessionTracking.currentMonth = {
-      sessionsCount: currentSessions.length,
-      totalDuration: completedSessions.length * sessionDuration + 
-                     activeSessions.reduce((sum, session) => sum + Math.min(now - session.timestamp, sessionDuration), 0),
-      activeSessions: activeSessions.length
-    };
-  }
-
-  getSessionLimits() {
-    const limits = {
-      pro: { sessions5h: 45, codePrompts5h: '10-40', monthlySessions: 50 },
-      'max-5x': { sessions5h: 225, codePrompts5h: '50-200', monthlySessions: 50 },
-      'max-20x': { sessions5h: 900, codePrompts5h: '200-800', monthlySessions: 50 }
-    };
-    
-    return limits[this.state.sessionTracking.planType] || limits.pro;
-  }
-
-  getTimeInCurrentBillingPeriod() {
-    if (!this.state.sessionTracking.billingPeriodStart) return 0;
-    
-    const start = new Date(this.state.sessionTracking.billingPeriodStart);
-    const now = new Date();
-    const totalPeriod = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
-    const elapsed = now - start;
-    
-    return Math.min(elapsed / totalPeriod, 1); // Return as percentage (0-1)
-  }
-
-  getEstimatedMonthlyUsage() {
-    const timeProgress = this.getTimeInCurrentBillingPeriod();
-    const currentSessions = this.state.sessionTracking.currentMonth.sessionsCount;
-    
-    if (timeProgress === 0) return 0;
-    
-    return Math.round(currentSessions / timeProgress);
-  }
-
-  getCurrentActiveSession() {
-    if (!this.state.sessionTracking.enabled || !this.state.sessionTracking.sessions) {
-      return null;
-    }
-
-    const now = new Date();
-    const sessionDuration = 5 * 60 * 60 * 1000; // 5 hours in milliseconds
-
-    // Find the most recent session_start within the last 5 hours
-    const recentSessions = this.state.sessionTracking.sessions
-      .filter(s => s.event === 'session_start')
-      .sort((a, b) => b.timestamp - a.timestamp); // Most recent first
-
-    for (const session of recentSessions) {
-      const sessionStart = new Date(session.timestamp * 1000);
-      const sessionEnd = new Date(sessionStart.getTime() + sessionDuration);
-      const timeRemaining = Math.max(0, sessionEnd - now);
-      
-      if (timeRemaining > 0) {
-        // This session is still active
-        return {
-          startTime: sessionStart,
-          endTime: sessionEnd,
-          timeRemaining,
-          isActive: true,
-          project: session.project,
-          session: session
-        };
-      }
-    }
-
-    return null;
-  }
-
-  getCountdownInfo() {
-    const activeSession = this.getCurrentActiveSession();
-    
-    if (!activeSession || !activeSession.isActive) {
-      return {
-        hasActiveSession: false,
-        timeRemaining: 0,
-        hours: 0,
-        minutes: 0,
-        seconds: 0,
-        project: null
-      };
-    }
-
-    const totalSeconds = Math.floor(activeSession.timeRemaining / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-
-    return {
-      hasActiveSession: true,
-      timeRemaining: activeSession.timeRemaining,
-      hours,
-      minutes,
-      seconds,
-      project: activeSession.project,
-      sessionStart: activeSession.startTime,
-      sessionEnd: activeSession.endTime
-    };
-  }
-
   getUserConfigPaths() {
-    const home = os.homedir();
     return {
-      settings: path.join(home, '.claude', 'settings.json'),
-      memory: path.join(home, '.claude', 'CLAUDE.md')
+      settings: path.join(os.homedir(), '.claude', 'settings.json'),
+      settingsLocal: path.join(os.homedir(), '.claude', 'settings.local.json'),
+      memory: path.join(os.homedir(), '.claude', 'CLAUDE.md')
     };
   }
 
@@ -1354,6 +1092,70 @@ class ClaudeManager {
     }
   }
 
+  async deleteEnvFromProject(projectName, key) {
+    try {
+      const project = this.state.projects[projectName];
+      if (!project) {
+        throw new Error('Project not found');
+      }
+
+      const envPath = path.join(project.path, '.env');
+      
+      if (await fs.pathExists(envPath)) {
+        const content = await fs.readFile(envPath, 'utf8');
+        const existingVars = this.parseEnvFile(content);
+        
+        if (key in existingVars) {
+          delete existingVars[key];
+          
+          // Write updated content back to .env
+          const envContent = Object.entries(existingVars)
+            .map(([k, v]) => `${k}=${v}`)
+            .join('\n');
+          
+          await fs.writeFile(envPath, envContent, 'utf8');
+          await this.refreshProjectEnvVars(projectName);
+          
+          return { success: true };
+        } else {
+          throw new Error(`Environment variable "${key}" not found in project`);
+        }
+      } else {
+        throw new Error('Project .env file not found');
+      }
+    } catch (error) {
+      throw new Error(`Failed to delete env var from project: ${error.message}`);
+    }
+  }
+
+  async copyEnvToUser(projectName, key) {
+    try {
+      const project = this.state.projects[projectName];
+      if (!project) {
+        throw new Error('Project not found');
+      }
+
+      const envPath = path.join(project.path, '.env');
+      
+      if (await fs.pathExists(envPath)) {
+        const content = await fs.readFile(envPath, 'utf8');
+        const existingVars = this.parseEnvFile(content);
+        
+        if (key in existingVars) {
+          // Copy the variable to user-level .env
+          await this.saveUserEnvVar(key, existingVars[key]);
+          return { success: true };
+        } else {
+          throw new Error(`Environment variable "${key}" not found in project`);
+        }
+      } else {
+        throw new Error('Project .env file not found');
+      }
+    } catch (error) {
+      throw new Error(`Failed to copy env var to user level: ${error.message}`);
+    }
+  }
+
   setupWebServer() {
     this.app.use(express.static(path.join(__dirname, 'public')));
     this.app.use(express.json());
@@ -1663,92 +1465,31 @@ class ClaudeManager {
       }
     });
 
-    // Session tracking API endpoints
-    this.app.post('/api/toggle-session-tracking', async (req, res) => {
-      const { enabled } = req.body;
+    this.app.post('/api/delete-env-from-project', async (req, res) => {
+      const { projectName, key } = req.body;
       
-      if (typeof enabled !== 'boolean') {
-        return res.status(400).json({ error: 'enabled must be a boolean' });
+      if (!projectName || !key) {
+        return res.status(400).json({ error: 'Project name and key required' });
       }
 
       try {
-        const result = await this.toggleSessionTracking(enabled);
-        res.json(result);
+        await this.deleteEnvFromProject(projectName, key);
+        res.json({ success: true, message: 'Environment variable removed from project' });
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
     });
 
-    this.app.post('/api/update-session-config', async (req, res) => {
-      const { planType, billingPeriodStart } = req.body;
+    this.app.post('/api/copy-env-to-user', async (req, res) => {
+      const { projectName, key } = req.body;
       
-      try {
-        if (planType && ['pro', 'max-5x', 'max-20x'].includes(planType)) {
-          this.state.sessionTracking.planType = planType;
-        }
-        
-        if (billingPeriodStart) {
-          this.state.sessionTracking.billingPeriodStart = billingPeriodStart;
-          this.calculateMonthlyStats(); // Recalculate with new period
-        }
-        
-        await this.saveSessionTracking();
-        await this.saveSettings(); // Save persistent settings
-        res.json({ success: true, sessionTracking: this.state.sessionTracking });
-      } catch (error) {
-        res.status(500).json({ error: error.message });
-      }
-    });
-
-    this.app.post('/api/session-event', async (req, res) => {
-      const { event, timestamp, project } = req.body;
-      
-      if (!event || !timestamp || !project) {
-        return res.status(400).json({ error: 'event, timestamp, and project required' });
+      if (!projectName || !key) {
+        return res.status(400).json({ error: 'Project name and key required' });
       }
 
       try {
-        await this.recordSessionEvent(event, timestamp, project);
-        res.json({ success: true });
-      } catch (error) {
-        res.status(500).json({ error: error.message });
-      }
-    });
-
-    this.app.get('/api/session-stats', (req, res) => {
-      const limits = this.getSessionLimits();
-      const stats = this.state.sessionTracking.currentMonth;
-      const countdown = this.getCountdownInfo();
-      
-      res.json({
-        tracking: this.state.sessionTracking,
-        limits,
-        stats,
-        countdown,
-        usage: {
-          monthlyProgress: stats.sessionsCount / limits.monthlySessions,
-          timeInCurrentPeriod: this.getTimeInCurrentBillingPeriod(),
-          estimatedMonthlyUsage: this.getEstimatedMonthlyUsage()
-        }
-      });
-    });
-
-    this.app.get('/api/countdown', (req, res) => {
-      const countdown = this.getCountdownInfo();
-      res.json(countdown);
-    });
-
-    this.app.post('/api/clear-session-data', async (req, res) => {
-      try {
-        this.state.sessionTracking.sessions = [];
-        this.state.sessionTracking.currentMonth = {
-          sessionsCount: 0,
-          totalDuration: 0,
-          activeSessions: 0
-        };
-        
-        await this.saveSessionTracking();
-        res.json({ success: true, message: 'Session data cleared' });
+        await this.copyEnvToUser(projectName, key);
+        res.json({ success: true, message: 'Environment variable copied to user level' });
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
@@ -1786,6 +1527,80 @@ class ClaudeManager {
       });
     });
 
+    // Session Tracking API endpoints
+    this.app.post('/api/toggle-session-tracking', async (req, res) => {
+      const { enabled } = req.body;
+      
+      try {
+        this.state.sessionTracking.enabled = enabled;
+        
+        if (enabled) {
+          // Initial scan when enabling
+          await this.updateSessionTracking();
+        } else {
+          // Clear countdown when disabling
+          if (this.sessionCountdownInterval) {
+            clearInterval(this.sessionCountdownInterval);
+            this.sessionCountdownInterval = null;
+          }
+        }
+        
+        await this.saveSessionTracking();
+        this.broadcast({ type: 'sessionTracking', data: this.getSessionStats() });
+        
+        res.json({ success: true, enabled });
+      } catch (error) {
+        console.error('Error toggling session tracking:', error);
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/session-stats', (req, res) => {
+      res.json(this.getSessionStats());
+    });
+
+    this.app.get('/api/countdown', (req, res) => {
+      const stats = this.getSessionStats();
+      res.json({
+        isActive: stats.isActive,
+        timeRemaining: stats.timeRemaining
+      });
+    });
+
+    this.app.post('/api/set-billing-date', async (req, res) => {
+      const { billingDate } = req.body;
+      
+      try {
+        if (billingDate < 1 || billingDate > 28) {
+          return res.status(400).json({ error: 'Billing date must be between 1 and 28' });
+        }
+        
+        this.state.sessionTracking.billingDate = billingDate;
+        
+        // Rescan with new billing date
+        if (this.state.sessionTracking.enabled) {
+          await this.updateSessionTracking();
+        }
+        
+        await this.saveSessionTracking();
+        res.json({ success: true, billingDate });
+      } catch (error) {
+        console.error('Error setting billing date:', error);
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/session-status', (req, res) => {
+      const tracking = this.state.sessionTracking;
+      res.json({
+        enabled: tracking.enabled,
+        sessions: tracking.sessionHistory || [],
+        monthlySessions: tracking.monthlySessions,
+        currentSessionStart: tracking.currentSessionStart,
+        billingDate: tracking.billingDate
+      });
+    });
+
     this.server = this.app.listen(3456);
     
     // WebSocket server for real-time updates
@@ -1803,7 +1618,229 @@ class ClaudeManager {
     });
   }
 
+  // Session Tracking Methods
+  async parseJSONLFile(filePath) {
+    try {
+      const content = await fs.readFile(filePath, 'utf-8');
+      const lines = content.trim().split('\n').filter(line => line);
+      const messages = [];
+      
+      for (const line of lines) {
+        try {
+          const entry = JSON.parse(line);
+          // Only track user messages as they start sessions
+          if (entry.type === 'user' && entry.message?.role === 'user') {
+            messages.push({
+              timestamp: new Date(entry.timestamp).getTime(),
+              sessionId: entry.sessionId
+            });
+          }
+        } catch (e) {
+          // Skip malformed lines
+        }
+      }
+      
+      return messages;
+    } catch (error) {
+      return [];
+    }
+  }
+
+  async scanAllJSONLFiles() {
+    try {
+      const projectsDir = this.claudeProjectsPath;
+      if (!await fs.pathExists(projectsDir)) {
+        return [];
+      }
+
+      const allMessages = [];
+      
+      // Recursively find all .jsonl files
+      const findJSONLFiles = async (dir) => {
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+        const files = [];
+        
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            files.push(...await findJSONLFiles(fullPath));
+          } else if (entry.name.endsWith('.jsonl')) {
+            files.push(fullPath);
+          }
+        }
+        
+        return files;
+      };
+
+      const jsonlFiles = await findJSONLFiles(projectsDir);
+      
+      // Parse all files
+      for (const file of jsonlFiles) {
+        const messages = await this.parseJSONLFile(file);
+        allMessages.push(...messages);
+      }
+      
+      // Sort by timestamp
+      allMessages.sort((a, b) => a.timestamp - b.timestamp);
+      
+      return allMessages;
+    } catch (error) {
+      console.error('Error scanning JSONL files:', error);
+      return [];
+    }
+  }
+
+  calculateSessions(messages, billingDate) {
+    if (!messages.length) return { sessions: [], count: 0 };
+    
+    const sessions = [];
+    let currentSessionStart = null;
+    
+    // Calculate billing period start
+    const now = new Date();
+    let billingPeriodStart = new Date(now.getFullYear(), now.getMonth(), billingDate);
+    if (billingPeriodStart > now) {
+      billingPeriodStart.setMonth(billingPeriodStart.getMonth() - 1);
+    }
+    
+    const billingPeriodStartTime = billingPeriodStart.getTime();
+    const fiveHoursMs = 5 * 60 * 60 * 1000; // 5 hours in milliseconds
+    
+    for (const message of messages) {
+      // Skip messages before current billing period
+      if (message.timestamp < billingPeriodStartTime) continue;
+      
+      if (!currentSessionStart || message.timestamp - currentSessionStart > fiveHoursMs) {
+        // New session
+        currentSessionStart = message.timestamp;
+        sessions.push({
+          start: currentSessionStart,
+          end: Math.min(currentSessionStart + fiveHoursMs, Date.now())
+        });
+      }
+    }
+    
+    // Update last session end time if it's current
+    if (sessions.length > 0) {
+      const lastSession = sessions[sessions.length - 1];
+      const now = Date.now();
+      if (now - lastSession.start < fiveHoursMs) {
+        lastSession.end = now;
+        lastSession.isActive = true;
+      }
+    }
+    
+    return { sessions, count: sessions.length };
+  }
+
+  async updateSessionTracking() {
+    if (!this.state.sessionTracking.enabled) return;
+    
+    try {
+      const messages = await this.scanAllJSONLFiles();
+      const { sessions, count } = this.calculateSessions(messages, this.state.sessionTracking.billingDate);
+      
+      // Update state
+      this.state.sessionTracking.monthlySessions = count;
+      this.state.sessionTracking.sessionHistory = sessions;
+      
+      // Update current session
+      if (sessions.length > 0 && sessions[sessions.length - 1].isActive) {
+        this.state.sessionTracking.currentSessionStart = sessions[sessions.length - 1].start;
+      } else {
+        this.state.sessionTracking.currentSessionStart = null;
+      }
+      
+      this.state.sessionTracking.lastScannedTimestamp = Date.now();
+      
+      await this.saveSessionTracking();
+      this.broadcast({ type: 'sessionTracking', data: this.getSessionStats() });
+    } catch (error) {
+      console.error('Error updating session tracking:', error);
+    }
+  }
+
+  getSessionStats() {
+    const tracking = this.state.sessionTracking;
+    if (!tracking.enabled) {
+      return { enabled: false };
+    }
+    
+    const now = Date.now();
+    const fiveHoursMs = 5 * 60 * 60 * 1000;
+    let timeRemaining = null;
+    let isActive = false;
+    
+    if (tracking.currentSessionStart) {
+      const elapsed = now - tracking.currentSessionStart;
+      if (elapsed < fiveHoursMs) {
+        isActive = true;
+        timeRemaining = fiveHoursMs - elapsed;
+      }
+    }
+    
+    return {
+      enabled: tracking.enabled,
+      isActive,
+      currentSessionStart: tracking.currentSessionStart,
+      timeRemaining,
+      monthlySessions: tracking.monthlySessions,
+      billingDate: tracking.billingDate,
+      lastScanned: tracking.lastScannedTimestamp
+    };
+  }
+
+  startSessionCountdown() {
+    if (this.sessionCountdownInterval) {
+      clearInterval(this.sessionCountdownInterval);
+    }
+    
+    this.sessionCountdownInterval = setInterval(() => {
+      const stats = this.getSessionStats();
+      if (stats.isActive) {
+        this.broadcast({ type: 'sessionCountdown', data: stats });
+      } else {
+        // Session ended, do a full rescan
+        this.updateSessionTracking();
+        clearInterval(this.sessionCountdownInterval);
+        this.sessionCountdownInterval = null;
+      }
+    }, 1000); // Update every second
+  }
+
+  async setupSessionWatcher() {
+    if (!await fs.pathExists(this.claudeProjectsPath)) {
+      await fs.ensureDir(this.claudeProjectsPath);
+    }
+    
+    // Watch for any changes in the Claude projects directory
+    const watcher = chokidar.watch(path.join(this.claudeProjectsPath, '**/*.jsonl'), {
+      persistent: true,
+      ignoreInitial: true,
+      depth: 10
+    });
+    
+    let updateTimer = null;
+    const scheduleUpdate = () => {
+      if (updateTimer) clearTimeout(updateTimer);
+      updateTimer = setTimeout(() => {
+        if (this.state.sessionTracking.enabled) {
+          this.updateSessionTracking();
+        }
+      }, 2000); // Debounce updates
+    };
+    
+    watcher.on('add', scheduleUpdate);
+    watcher.on('change', scheduleUpdate);
+    watcher.on('unlink', scheduleUpdate);
+    
+    this.watchers.push(watcher);
+  }
+
   async shutdown() {
+    if (this.sessionCountdownInterval) {
+      clearInterval(this.sessionCountdownInterval);
+    }
     this.watchers.forEach(watcher => watcher.close());
     if (this.server) {
       this.server.close();
