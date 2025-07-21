@@ -71,7 +71,7 @@ const COMMON_HOOKS = {
     {
       name: 'TTS Alert',
       pattern: '*',
-      command: 'curl -X POST "http://100.83.40.11:8080/tts" -H "Content-Type: application/json" -d "{\\"text\\": \\"$CLAUDE_NOTIFICATION\\"}"'
+      command: 'TEMP_FILE=$(mktemp).wav && curl -s -X POST "http://100.83.40.11:8080/v1/tts" -H "Content-Type: application/json" -d "{\\"text\\": \\"$CLAUDE_NOTIFICATION\\"}" -o "$TEMP_FILE" && afplay "$TEMP_FILE" && rm "$TEMP_FILE"'
     },
     {
       name: 'Slack Notification',
@@ -301,7 +301,7 @@ const MCP_TEMPLATES = {
   supabase: {
     name: 'Supabase',
     description: 'Supabase database and API access',
-    command: 'npx -y @supabase/mcp-server-supabase@latest --read-only --project-ref={project_ref}',
+    command: 'npx @supabase/mcp-server-supabase@latest',
     installCommand: 'npm install -D @supabase/mcp-server-supabase',
     requiresInstall: true,
     parameters: [
@@ -311,6 +311,15 @@ const MCP_TEMPLATES = {
         description: 'Supabase project reference ID',
         required: true,
         envHints: ['supabase_project_ref', 'supabase_ref', 'project_ref']
+      }
+    ],
+    envVars: [
+      {
+        name: 'SUPABASE_ACCESS_TOKEN',
+        label: 'Supabase Access Token',
+        description: 'Supabase access token for database access',
+        required: true,
+        envHints: ['supabase_access_token', 'supabase_token', 'supabase_key']
       }
     ]
   },
@@ -535,6 +544,48 @@ const MCP_TEMPLATES = {
     command: 'uvx awslabs.core-mcp-server@latest',
     installCommand: 'pip install uv',
     requiresInstall: true
+  },
+
+  // Code Analysis & Graph
+  'code-grapher': {
+    name: 'Code Grapher',
+    description: 'Code analysis and visualization with Neo4j and Ollama',
+    command: 'python /Users/danielbeach/Code/code-grapher/mcp_server.py',
+    installCommand: 'pip install neo4j-driver ollama',
+    requiresInstall: false,
+    envVars: [
+      {
+        name: 'NEO4J_URL',
+        label: 'Neo4j Database URL',
+        description: 'Neo4j database connection URL',
+        required: true,
+        default: 'bolt://localhost:7687',
+        envHints: ['neo4j_url', 'neo4j_uri', 'database_url']
+      },
+      {
+        name: 'NEO4J_USERNAME',
+        label: 'Neo4j Username',
+        description: 'Neo4j database username',
+        required: true,
+        default: 'neo4j',
+        envHints: ['neo4j_username', 'neo4j_user', 'db_username']
+      },
+      {
+        name: 'NEO4J_PASSWORD',
+        label: 'Neo4j Password',
+        description: 'Neo4j database password',
+        required: false,
+        envHints: ['neo4j_password', 'neo4j_pass', 'db_password']
+      },
+      {
+        name: 'OLLAMA_URL',
+        label: 'Ollama Server URL',
+        description: 'Ollama server endpoint for AI processing',
+        required: true,
+        default: 'http://localhost:11434',
+        envHints: ['ollama_url', 'ollama_endpoint', 'ollama_host']
+      }
+    ]
   }
 };
 
@@ -550,13 +601,16 @@ class ClaudeManager {
     this.userEnvFile = path.join(this.registryPath, 'user.env');
     this.settingsFile = path.join(this.registryPath, 'settings.json');
     this.sessionTrackingFile = path.join(this.registryPath, 'session-tracking.json');
+    this.mcpServersFile = path.join(this.registryPath, 'mcp-servers.json');
     this.claudeDesktopConfigPath = path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
     this.claudeProjectsPath = path.join(os.homedir(), '.claude', 'projects');
     this.state = {
       userConfig: {},
       projects: {},
       mcpServers: {},
+      projectMcpServers: {}, // Project-scoped MCP servers: { projectName: { serverName: config } }
       claudeDesktopMcpServers: {},
+      managedMcpServers: {}, // Our separate MCP server configurations with enable/disable
       userEnvVars: {},
       projectEnvVars: {},
       settings: {},
@@ -611,6 +665,9 @@ class ClaudeManager {
           this.startSessionCountdown();
         }
       }
+
+      // Load managed MCP servers
+      await this.loadManagedMcpServers();
     } catch (error) {
       console.error('Error loading registry:', error.message);
       this.state.projects = {};
@@ -633,11 +690,35 @@ class ClaudeManager {
     await fs.writeJson(this.sessionTrackingFile, this.state.sessionTracking, { spaces: 2 });
   }
 
+  async loadManagedMcpServers() {
+    try {
+      if (await fs.pathExists(this.mcpServersFile)) {
+        const data = await fs.readJson(this.mcpServersFile);
+        this.state.managedMcpServers = data || {};
+      } else {
+        this.state.managedMcpServers = {};
+      }
+    } catch (error) {
+      console.error('Error loading managed MCP servers:', error.message);
+      this.state.managedMcpServers = {};
+    }
+  }
+
+  async saveManagedMcpServers() {
+    try {
+      await fs.writeJson(this.mcpServersFile, this.state.managedMcpServers, { spaces: 2 });
+    } catch (error) {
+      console.error('Error saving managed MCP servers:', error.message);
+      throw error;
+    }
+  }
+
   getUserConfigPaths() {
     return {
       settings: path.join(os.homedir(), '.claude', 'settings.json'),
       settingsLocal: path.join(os.homedir(), '.claude', 'settings.local.json'),
-      memory: path.join(os.homedir(), '.claude', 'CLAUDE.md')
+      memory: path.join(os.homedir(), '.claude', 'CLAUDE.md'),
+      commands: path.join(os.homedir(), '.claude', 'commands')
     };
   }
 
@@ -646,7 +727,8 @@ class ClaudeManager {
       settings: path.join(projectPath, '.claude', 'settings.json'),
       settingsLocal: path.join(projectPath, '.claude', 'settings.local.json'),
       mcp: path.join(projectPath, '.mcp.json'),
-      memory: path.join(projectPath, 'CLAUDE.md')
+      memory: path.join(projectPath, 'CLAUDE.md'),
+      commands: path.join(projectPath, '.claude', 'commands')
     };
   }
 
@@ -713,6 +795,15 @@ class ClaudeManager {
       }
     }
 
+    // Load commands
+    if (await fs.pathExists(paths.commands)) {
+      try {
+        config.commands = await this.loadCommands(paths.commands);
+      } catch (error) {
+        config.commands = { error: error.message };
+      }
+    }
+
     this.state.userConfig = config;
   }
 
@@ -729,6 +820,8 @@ class ClaudeManager {
         try {
           if (key === 'memory') {
             config[key] = await fs.readFile(filePath, 'utf8');
+          } else if (key === 'commands') {
+            config[key] = await this.loadCommands(filePath);
           } else {
             config[key] = await fs.readJson(filePath);
           }
@@ -744,51 +837,180 @@ class ClaudeManager {
     this.state.projects[projectName].config = config;
   }
 
+  async loadCommands(commandsPath) {
+    const commands = {};
+    
+    if (!await fs.pathExists(commandsPath)) {
+      return commands;
+    }
+
+    const entries = await fs.readdir(commandsPath, { withFileTypes: true });
+    
+    for (const entry of entries) {
+      if (entry.isFile() && entry.name.endsWith('.md')) {
+        const commandName = entry.name.replace('.md', '');
+        const commandPath = path.join(commandsPath, entry.name);
+        try {
+          const content = await fs.readFile(commandPath, 'utf8');
+          commands[commandName] = {
+            content,
+            path: commandPath,
+            name: commandName
+          };
+        } catch (error) {
+          commands[commandName] = { error: error.message };
+        }
+      } else if (entry.isDirectory()) {
+        // Support namespaced commands in subdirectories
+        const subCommands = await this.loadCommands(path.join(commandsPath, entry.name));
+        for (const [subCommandName, subCommand] of Object.entries(subCommands)) {
+          commands[`${entry.name}/${subCommandName}`] = subCommand;
+        }
+      }
+    }
+    
+    return commands;
+  }
+
   async refreshMcpServers() {
     return new Promise((resolve) => {
       exec('claude mcp list', (error, stdout, stderr) => {
         if (error) {
           this.state.mcpServers = { error: error.message };
-        } else {
-          try {
-            // Try to parse as JSON first
-            this.state.mcpServers = JSON.parse(stdout);
-          } catch (parseError) {
-            // Parse text output manually
-            const lines = stdout.split('\n').filter(line => line.trim());
-            const servers = {};
-            
-            // Look for patterns like "server-name  command args"
-            lines.forEach(line => {
-              const trimmed = line.trim();
-              if (trimmed && !trimmed.startsWith('No MCP') && !trimmed.startsWith('---')) {
-                // Split on multiple spaces to separate name from command
-                const parts = trimmed.split(/\s{2,}/);
-                if (parts.length >= 2) {
-                  servers[parts[0]] = parts[1];
-                } else if (trimmed.includes('stdio:')) {
-                  // Handle stdio format
-                  const [name, command] = trimmed.split(' stdio:');
-                  if (name && command) {
-                    servers[name.trim()] = 'stdio:' + command.trim();
-                  }
+          resolve();
+          return;
+        }
+
+        try {
+          // Try to parse as JSON first
+          this.state.mcpServers = JSON.parse(stdout);
+          resolve();
+          return;
+        } catch (parseError) {
+          // Parse text output manually and filter by scope
+          const lines = stdout.split('\n').filter(line => line.trim());
+          const serverNames = [];
+          
+          // Extract server names from the list
+          lines.forEach(line => {
+            const trimmed = line.trim();
+            if (trimmed && !trimmed.startsWith('No MCP') && !trimmed.startsWith('---')) {
+              const colonIndex = trimmed.indexOf(':');
+              if (colonIndex > 0) {
+                const name = trimmed.substring(0, colonIndex).trim();
+                if (name) {
+                  serverNames.push(name);
                 }
               }
-            });
-            
-            this.state.mcpServers = Object.keys(servers).length > 0 ? servers : { 
-              info: stdout.trim() || 'No MCP servers found' 
-            };
+            }
+          });
+
+          if (serverNames.length === 0) {
+            this.state.mcpServers = { info: 'No MCP servers found' };
+            resolve();
+            return;
           }
+
+          // Get details for each server to check scope
+          const serverDetailsPromises = serverNames.map(name => {
+            return new Promise((resolveServer) => {
+              exec(`claude mcp get "${name}"`, (error, stdout, stderr) => {
+                if (error) {
+                  // Server no longer exists, skip it
+                  console.log(`Server ${name} no longer exists, skipping`);
+                  resolveServer(null);
+                  return;
+                }
+
+                const lines = stdout.split('\n');
+                let scope = 'Unknown';
+                let command = '';
+                let args = [];
+
+                lines.forEach(line => {
+                  const trimmed = line.trim();
+                  if (trimmed.startsWith('Scope:')) {
+                    scope = trimmed.replace('Scope:', '').trim();
+                  } else if (trimmed.startsWith('Command:')) {
+                    command = trimmed.replace('Command:', '').trim();
+                  } else if (trimmed.startsWith('Args:')) {
+                    const argsStr = trimmed.replace('Args:', '').trim();
+                    if (argsStr) {
+                      args = [argsStr];
+                    }
+                  }
+                });
+
+                resolveServer({
+                  name,
+                  scope,
+                  command,
+                  args
+                });
+              });
+            });
+          });
+
+          Promise.all(serverDetailsPromises).then(serverDetails => {
+            const servers = {};
+            
+            // Filter to only include User scope servers and exclude null results
+            serverDetails.forEach(server => {
+              if (server && server.scope && server.scope.includes('User')) {
+                servers[server.name] = {
+                  command: server.command + (server.args.length > 0 ? ' ' + server.args.join(' ') : ''),
+                  args: server.args,
+                  scope: server.scope
+                };
+              }
+            });
+
+            this.state.mcpServers = Object.keys(servers).length > 0 ? servers : { 
+              info: 'No user-scoped MCP servers found' 
+            };
+            resolve();
+          }).catch(error => {
+            console.error('Error refreshing MCP servers:', error);
+            this.state.mcpServers = { error: error.message };
+            resolve();
+          });
         }
-        resolve();
       });
     });
+  }
+
+  async refreshProjectMcpServers() {
+    try {
+      this.state.projectMcpServers = {};
+      
+      for (const [projectName, projectInfo] of Object.entries(this.state.projects)) {
+        const projectPath = projectInfo.path;
+        const settingsPath = path.join(projectPath, '.claude', 'settings.json');
+        
+        try {
+          if (await fs.pathExists(settingsPath)) {
+            const content = await fs.readFile(settingsPath, 'utf8');
+            const settings = JSON.parse(content);
+            
+            if (settings.mcpServers && Object.keys(settings.mcpServers).length > 0) {
+              this.state.projectMcpServers[projectName] = settings.mcpServers;
+            }
+          }
+        } catch (error) {
+          console.error(`Error loading MCP servers for project ${projectName}:`, error.message);
+          // Don't fail completely, just skip this project
+        }
+      }
+    } catch (error) {
+      console.error('Error refreshing project MCP servers:', error.message);
+      this.state.projectMcpServers = { error: error.message };
+    }
   }
 
   async refreshAllData() {
     await this.refreshUserConfig();
     await this.refreshMcpServers();
+    await this.refreshProjectMcpServers();
     await this.refreshClaudeDesktopMcpServers();
     await this.refreshUserEnvVars();
     
@@ -924,6 +1146,491 @@ class ClaudeManager {
     } catch (error) {
       throw new Error(`Failed to remove Claude Desktop MCP server: ${error.message}`);
     }
+  }
+
+  async removeMcpServer(name, scope = 'user', projectPath = null) {
+    try {
+      // Validate and sanitize server name
+      if (!name || typeof name !== 'string') {
+        throw new Error('Invalid server name provided');
+      }
+      
+      // Sanitize server name to prevent command injection
+      const sanitizedName = name.replace(/[;&|`$(){}[\]\\'"]/g, '');
+      if (sanitizedName !== name) {
+        throw new Error('Server name contains invalid characters');
+      }
+      
+      // Determine the scope and execution context
+      const scopeFlag = scope === 'project' ? '--scope project' : '--scope user';
+      const execOptions = scope === 'project' && projectPath ? { cwd: projectPath } : {};
+      
+      console.log(`Removing MCP server: ${sanitizedName} with scope: ${scope}`);
+      
+      // Use Claude CLI to remove the MCP server with proper escaping
+      const result = await new Promise((resolve, reject) => {
+        // Use shell escape to properly quote the server name
+        const { spawn } = require('child_process');
+        const args = ['mcp', 'remove', sanitizedName];
+        if (scopeFlag) {
+          args.push('--scope', scope === 'project' ? 'project' : 'user');
+        }
+        
+        const child = spawn('claude', args, execOptions);
+        let stdout = '';
+        let stderr = '';
+        
+        child.stdout.on('data', (data) => {
+          stdout += data.toString();
+        });
+        
+        child.stderr.on('data', (data) => {
+          stderr += data.toString();
+        });
+        
+        child.on('close', (code) => {
+          if (code === 0) {
+            resolve(stdout);
+          } else {
+            reject(new Error(`Command failed with code ${code}: ${stderr || stdout}`));
+          }
+        });
+        
+        child.on('error', (error) => {
+          reject(new Error(`Failed to execute command: ${error.message}`));
+        });
+      });
+
+      // Refresh the MCP servers data
+      await this.refreshMcpServers();
+      
+      return { success: true, message: `${sanitizedName} MCP server removed from ${scope} scope successfully` };
+    } catch (error) {
+      console.error(`Error removing MCP server ${name}:`, error);
+      throw new Error(`Failed to remove MCP server: ${error.message}`);
+    }
+  }
+
+  // Managed MCP Server Methods
+  async addManagedMcpServer(name, template, parameters = {}, envVars = {}, scope = 'user', projectPath = null) {
+    try {
+      if (!MCP_TEMPLATES[template]) {
+        throw new Error(`Template ${template} not found`);
+      }
+
+      const templateConfig = MCP_TEMPLATES[template];
+      let finalCommand = templateConfig.command;
+
+      // Substitute parameters in command
+      if (parameters && templateConfig.parameters) {
+        templateConfig.parameters.forEach(param => {
+          if (parameters[param.name]) {
+            const placeholder = `{${param.name}}`;
+            finalCommand = finalCommand.replace(placeholder, parameters[param.name]);
+          }
+        });
+      }
+
+      // Store configuration in our managed storage
+      this.state.managedMcpServers[name] = {
+        name,
+        template,
+        templateConfig,
+        command: finalCommand,
+        parameters,
+        envVars,
+        scope,
+        projectPath,
+        enabled: false, // Start disabled so user can enable when ready
+        createdAt: Date.now(),
+        lastModified: Date.now()
+      };
+
+      await this.saveManagedMcpServers();
+      return { success: true, message: `${name} MCP server configuration saved successfully` };
+    } catch (error) {
+      throw new Error(`Failed to add managed MCP server: ${error.message}`);
+    }
+  }
+
+  async enableManagedMcpServer(name) {
+    try {
+      const server = this.state.managedMcpServers[name];
+      if (!server) {
+        throw new Error(`Managed MCP server ${name} not found`);
+      }
+
+      // Validate and sanitize server name
+      if (!name || typeof name !== 'string') {
+        throw new Error('Invalid server name provided');
+      }
+      
+      // Sanitize server name to prevent command injection
+      const sanitizedName = name.replace(/[;&|`$(){}[\]\\'"]/g, '');
+      if (sanitizedName !== name) {
+        throw new Error('Server name contains invalid characters');
+      }
+
+      // Add environment variables to the appropriate .env file
+      if (server.envVars && Object.keys(server.envVars).length > 0) {
+        if (server.scope === 'project' && server.projectPath) {
+          // Add to project .env
+          const projectName = Object.keys(this.state.projects).find(
+            pName => this.state.projects[pName].path === server.projectPath
+          );
+          if (projectName) {
+            for (const [key, value] of Object.entries(server.envVars)) {
+              await this.addEnvToProject(projectName, key, value);
+            }
+          }
+        } else {
+          // Add to user .env
+          for (const [key, value] of Object.entries(server.envVars)) {
+            await this.saveUserEnvVar(key, value);
+          }
+        }
+      }
+
+      // Install dependencies if needed
+      if (server.templateConfig.requiresInstall && server.templateConfig.installCommand) {
+        if (server.scope === 'project' && server.projectPath) {
+          console.log(`Installing dependencies for ${server.templateConfig.name}...`);
+          
+          await new Promise((resolve, reject) => {
+            exec(server.templateConfig.installCommand, { cwd: server.projectPath }, (error, stdout, stderr) => {
+              if (error) {
+                console.error(`Install failed: ${error.message}`);
+                reject(error);
+              } else {
+                console.log(`Successfully installed ${server.templateConfig.name}`);
+                resolve();
+              }
+            });
+          });
+        }
+      }
+
+      // Add the MCP server to Claude's configuration using secure spawn
+      const execOptions = server.scope === 'project' && server.projectPath ? { cwd: server.projectPath } : {};
+      
+      console.log(`Enabling MCP server: ${sanitizedName} with scope: ${server.scope}`);
+      
+      // Clean the command to remove flags that Claude CLI doesn't understand
+      const cleanCommand = server.command.replace(/\s+-y\s+/, ' ').trim();
+      
+      // Parse the command into arguments
+      const commandParts = cleanCommand.split(/\s+/).filter(part => part.length > 0);
+      
+      // Build the arguments array safely
+      const args = ['mcp', 'add', '--scope', server.scope, sanitizedName, ...commandParts];
+      
+      await new Promise((resolve, reject) => {
+        const { spawn } = require('child_process');
+        const child = spawn('claude', args, execOptions);
+        let stdout = '';
+        let stderr = '';
+        
+        child.stdout.on('data', (data) => {
+          stdout += data.toString();
+        });
+        
+        child.stderr.on('data', (data) => {
+          stderr += data.toString();
+        });
+        
+        child.on('close', (code) => {
+          if (code === 0) {
+            resolve(stdout);
+          } else {
+            reject(new Error(`Command failed with code ${code}: ${stderr || stdout}`));
+          }
+        });
+        
+        child.on('error', (error) => {
+          reject(new Error(`Failed to execute command: ${error.message}`));
+        });
+      });
+
+      // Update enabled status
+      server.enabled = true;
+      server.lastModified = Date.now();
+      server.lastEnabled = Date.now();
+
+      await this.saveManagedMcpServers();
+      await this.refreshMcpServers();
+
+      return { success: true, message: `${sanitizedName} MCP server enabled successfully` };
+    } catch (error) {
+      console.error(`Error enabling MCP server ${name}:`, error);
+      throw new Error(`Failed to enable MCP server: ${error.message}`);
+    }
+  }
+
+  async disableManagedMcpServer(name) {
+    try {
+      const server = this.state.managedMcpServers[name];
+      if (!server) {
+        throw new Error(`Managed MCP server ${name} not found`);
+      }
+
+      // Validate and sanitize server name
+      if (!name || typeof name !== 'string') {
+        throw new Error('Invalid server name provided');
+      }
+      
+      // Sanitize server name to prevent command injection
+      const sanitizedName = name.replace(/[;&|`$(){}[\]\\'"]/g, '');
+      if (sanitizedName !== name) {
+        throw new Error('Server name contains invalid characters');
+      }
+
+      // Remove the MCP server from Claude's configuration
+      const scopeFlag = server.scope === 'project' ? '--scope project' : '--scope user';
+      const execOptions = server.scope === 'project' && server.projectPath ? { cwd: server.projectPath } : {};
+      
+      console.log(`Disabling MCP server: ${sanitizedName} with scope: ${server.scope}`);
+      
+      try {
+        await new Promise((resolve, reject) => {
+          // Use spawn instead of exec for better control
+          const { spawn } = require('child_process');
+          const args = ['mcp', 'remove', sanitizedName];
+          if (scopeFlag) {
+            args.push('--scope', server.scope === 'project' ? 'project' : 'user');
+          }
+          
+          const child = spawn('claude', args, execOptions);
+          let stdout = '';
+          let stderr = '';
+          
+          child.stdout.on('data', (data) => {
+            stdout += data.toString();
+          });
+          
+          child.stderr.on('data', (data) => {
+            stderr += data.toString();
+          });
+          
+          child.on('close', (code) => {
+            if (code === 0) {
+              resolve(stdout);
+            } else {
+              // Don't fail if server is already removed, just warn
+              console.warn(`Warning: Command failed with code ${code}: ${stderr || stdout}`);
+              resolve(stdout);
+            }
+          });
+          
+          child.on('error', (error) => {
+            console.warn(`Warning: Failed to execute command: ${error.message}`);
+            resolve(''); // Don't fail the operation
+          });
+        });
+      } catch (cmdError) {
+        // Log the error but don't fail the disable operation
+        console.warn(`Warning removing MCP server from Claude config: ${cmdError.message}`);
+      }
+
+      // Update enabled status but keep configuration
+      server.enabled = false;
+      server.lastModified = Date.now();
+      server.lastDisabled = Date.now();
+
+      await this.saveManagedMcpServers();
+      await this.refreshMcpServers();
+
+      return { success: true, message: `${sanitizedName} MCP server disabled successfully` };
+    } catch (error) {
+      console.error(`Error disabling MCP server ${name}:`, error);
+      throw new Error(`Failed to disable MCP server: ${error.message}`);
+    }
+  }
+
+  async deleteManagedMcpServer(name) {
+    try {
+      const server = this.state.managedMcpServers[name];
+      if (!server) {
+        throw new Error(`Managed MCP server ${name} not found`);
+      }
+
+      // Disable first if enabled
+      if (server.enabled) {
+        await this.disableManagedMcpServer(name);
+      }
+
+      // Remove from our managed storage
+      delete this.state.managedMcpServers[name];
+      await this.saveManagedMcpServers();
+
+      return { success: true, message: `${name} MCP server deleted successfully` };
+    } catch (error) {
+      throw new Error(`Failed to delete MCP server: ${error.message}`);
+    }
+  }
+
+  getMcpServerLogsPath(serverName) {
+    // Claude Code logs are typically stored in ~/.claude/logs/
+    const logsDir = path.join(os.homedir(), '.claude', 'logs');
+    
+    // Different possible log file patterns
+    const possibleLogFiles = [
+      path.join(logsDir, `${serverName}.log`),
+      path.join(logsDir, `mcp-${serverName}.log`),
+      path.join(logsDir, `server-${serverName}.log`),
+      path.join(logsDir, 'claude.log'), // General Claude log
+      path.join(logsDir, 'mcp.log'), // General MCP log
+    ];
+
+    // Return the first existing log file, or the general Claude log as default
+    for (const logFile of possibleLogFiles) {
+      if (fs.existsSync(logFile)) {
+        return logFile;
+      }
+    }
+
+    // If no specific logs found, return the general Claude log path
+    return path.join(logsDir, 'claude.log');
+  }
+
+  // Migration function to import existing MCP servers
+  async migrateExistingMcpServers() {
+    try {
+      const migrationResults = {
+        success: true,
+        migrated: [],
+        skipped: [],
+        errors: []
+      };
+
+      // Get current MCP servers from Claude CLI
+      const mcpList = await new Promise((resolve, reject) => {
+        exec('claude mcp list', (error, stdout, stderr) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve(stdout);
+          }
+        });
+      });
+
+      // Parse the MCP list output
+      const lines = mcpList.split('\n').filter(line => line.trim());
+      const existingServers = {};
+      
+      lines.forEach(line => {
+        const trimmed = line.trim();
+        if (trimmed && trimmed.includes(':')) {
+          const colonIndex = trimmed.indexOf(':');
+          const name = trimmed.substring(0, colonIndex).trim();
+          const command = trimmed.substring(colonIndex + 1).trim();
+          if (name && command) {
+            existingServers[name] = command;
+          }
+        }
+      });
+
+      // For each existing server, try to match it to a template and migrate
+      for (const [serverName, serverCommand] of Object.entries(existingServers)) {
+        try {
+          // Skip if already in managed servers
+          if (this.state.managedMcpServers[serverName]) {
+            migrationResults.skipped.push({
+              name: serverName,
+              reason: 'Already in managed servers'
+            });
+            continue;
+          }
+
+          // Try to match command to a template
+          const matchedTemplate = this.findTemplateForCommand(serverCommand);
+          
+          if (matchedTemplate) {
+            // Create managed server entry
+            this.state.managedMcpServers[serverName] = {
+              name: serverName,
+              template: matchedTemplate.key,
+              templateConfig: matchedTemplate.config,
+              command: serverCommand,
+              parameters: {},
+              envVars: {},
+              scope: 'user', // Assume user scope for existing servers
+              projectPath: null,
+              enabled: true, // Mark as enabled since it's currently active
+              createdAt: Date.now(),
+              lastModified: Date.now(),
+              migratedAt: Date.now(),
+              originalCommand: serverCommand
+            };
+
+            migrationResults.migrated.push({
+              name: serverName,
+              template: matchedTemplate.key,
+              command: serverCommand
+            });
+          } else {
+            // Create as custom/unknown template
+            this.state.managedMcpServers[serverName] = {
+              name: serverName,
+              template: 'custom',
+              templateConfig: {
+                name: 'Custom Server',
+                description: 'Migrated from existing installation',
+                command: serverCommand,
+                requiresInstall: false
+              },
+              command: serverCommand,
+              parameters: {},
+              envVars: {},
+              scope: 'user',
+              projectPath: null,
+              enabled: true,
+              createdAt: Date.now(),
+              lastModified: Date.now(),
+              migratedAt: Date.now(),
+              originalCommand: serverCommand
+            };
+
+            migrationResults.migrated.push({
+              name: serverName,
+              template: 'custom',
+              command: serverCommand
+            });
+          }
+        } catch (error) {
+          migrationResults.errors.push({
+            name: serverName,
+            error: error.message
+          });
+        }
+      }
+
+      // Save the updated managed servers
+      await this.saveManagedMcpServers();
+
+      return migrationResults;
+    } catch (error) {
+      throw new Error(`Migration failed: ${error.message}`);
+    }
+  }
+
+  findTemplateForCommand(command) {
+    // Try to match the command to one of our templates
+    for (const [key, template] of Object.entries(MCP_TEMPLATES)) {
+      // Clean commands for comparison
+      const cleanCommand = command.replace(/^npx\s+(-y\s+)?/, '').split(' ')[0];
+      const cleanTemplateCommand = template.command.replace(/^npx\s+(-y\s+)?/, '').split(' ')[0];
+      
+      if (cleanCommand === cleanTemplateCommand) {
+        return { key, config: template };
+      }
+      
+      // Also check for partial matches
+      if (cleanCommand.includes(cleanTemplateCommand) || cleanTemplateCommand.includes(cleanCommand)) {
+        return { key, config: template };
+      }
+    }
+    
+    return null;
   }
 
   // Environment Variables Management
@@ -1238,6 +1945,86 @@ class ClaudeManager {
       }
     });
 
+    // Commands API endpoints
+    this.app.post('/api/save-command', async (req, res) => {
+      const { scope, projectName, commandName, content } = req.body;
+      
+      if (!scope || !commandName || content === undefined) {
+        return res.status(400).json({ error: 'Scope, command name, and content required' });
+      }
+
+      try {
+        let commandsPath;
+        if (scope === 'user') {
+          commandsPath = path.join(os.homedir(), '.claude', 'commands');
+        } else if (scope === 'project' && projectName) {
+          const project = this.state.projects[projectName];
+          if (!project) {
+            return res.status(404).json({ error: 'Project not found' });
+          }
+          commandsPath = path.join(project.path, '.claude', 'commands');
+        } else {
+          return res.status(400).json({ error: 'Invalid scope or missing project name' });
+        }
+
+        // Ensure commands directory exists
+        await fs.ensureDir(commandsPath);
+        
+        const filePath = path.join(commandsPath, `${commandName}.md`);
+        await fs.writeFile(filePath, content, 'utf8');
+
+        // Refresh config to pick up the new command
+        if (scope === 'user') {
+          await this.refreshUserConfig();
+        } else {
+          await this.refreshProjectConfig(projectName);
+        }
+
+        res.json({ success: true, message: 'Command saved successfully' });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.delete('/api/delete-command', async (req, res) => {
+      const { scope, projectName, commandName } = req.body;
+      
+      if (!scope || !commandName) {
+        return res.status(400).json({ error: 'Scope and command name required' });
+      }
+
+      try {
+        let commandsPath;
+        if (scope === 'user') {
+          commandsPath = path.join(os.homedir(), '.claude', 'commands');
+        } else if (scope === 'project' && projectName) {
+          const project = this.state.projects[projectName];
+          if (!project) {
+            return res.status(404).json({ error: 'Project not found' });
+          }
+          commandsPath = path.join(project.path, '.claude', 'commands');
+        } else {
+          return res.status(400).json({ error: 'Invalid scope or missing project name' });
+        }
+
+        const filePath = path.join(commandsPath, `${commandName}.md`);
+        if (await fs.pathExists(filePath)) {
+          await fs.remove(filePath);
+        }
+
+        // Refresh config to remove the command
+        if (scope === 'user') {
+          await this.refreshUserConfig();
+        } else {
+          await this.refreshProjectConfig(projectName);
+        }
+
+        res.json({ success: true, message: 'Command deleted successfully' });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
     this.app.post('/api/register-project', async (req, res) => {
       const { name, path: projectPath } = req.body;
       
@@ -1520,6 +2307,110 @@ class ClaudeManager {
       }
     });
 
+    this.app.post('/api/remove-mcp-server', async (req, res) => {
+      const { name, scope, projectPath } = req.body;
+      
+      if (!name) {
+        return res.status(400).json({ error: 'Server name required' });
+      }
+
+      try {
+        const result = await this.removeMcpServer(name, scope, projectPath);
+        res.json(result);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Managed MCP Server API endpoints
+    this.app.get('/api/managed-mcp-servers', (req, res) => {
+      res.json(this.state.managedMcpServers);
+    });
+
+    this.app.post('/api/add-managed-mcp-server', async (req, res) => {
+      const { name, template, parameters, envVars, scope, projectPath } = req.body;
+      
+      if (!name || !template) {
+        return res.status(400).json({ error: 'Name and template required' });
+      }
+
+      try {
+        const result = await this.addManagedMcpServer(name, template, parameters, envVars, scope, projectPath);
+        res.json(result);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/enable-managed-mcp-server', async (req, res) => {
+      const { name } = req.body;
+      
+      if (!name) {
+        return res.status(400).json({ error: 'Server name required' });
+      }
+
+      try {
+        const result = await this.enableManagedMcpServer(name);
+        res.json(result);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/disable-managed-mcp-server', async (req, res) => {
+      const { name } = req.body;
+      
+      if (!name) {
+        return res.status(400).json({ error: 'Server name required' });
+      }
+
+      try {
+        const result = await this.disableManagedMcpServer(name);
+        res.json(result);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/delete-managed-mcp-server', async (req, res) => {
+      const { name } = req.body;
+      
+      if (!name) {
+        return res.status(400).json({ error: 'Server name required' });
+      }
+
+      try {
+        const result = await this.deleteManagedMcpServer(name);
+        res.json(result);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/mcp-server-logs/:serverName', (req, res) => {
+      const { serverName } = req.params;
+      
+      try {
+        const logsPath = this.getMcpServerLogsPath(serverName);
+        res.json({ 
+          success: true, 
+          logsPath,
+          exists: fs.existsSync(logsPath)
+        });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/migrate-existing-mcp-servers', async (req, res) => {
+      try {
+        const result = await this.migrateExistingMcpServers();
+        res.json(result);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
     this.app.get('/api/claude-desktop-config-path', (req, res) => {
       res.json({ 
         path: this.claudeDesktopConfigPath,
@@ -1590,6 +2481,43 @@ class ClaudeManager {
       }
     });
 
+    // TTS Notification API
+    this.app.post('/api/tts-notification', async (req, res) => {
+      const { text } = req.body;
+      
+      if (!text) {
+        return res.status(400).json({ error: 'Text required for TTS' });
+      }
+
+      try {
+        // Call Fish Speech S1 server
+        const ttsResponse = await fetch('http://100.83.40.11:8080/v1/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text })
+        });
+
+        if (!ttsResponse.ok) {
+          throw new Error(`TTS server responded with status: ${ttsResponse.status}`);
+        }
+
+        // Get the audio data
+        const audioBuffer = await ttsResponse.arrayBuffer();
+        
+        // Convert to base64 for easy transmission
+        const audioBase64 = Buffer.from(audioBuffer).toString('base64');
+        
+        res.json({ 
+          success: true, 
+          audio: audioBase64,
+          format: 'wav'
+        });
+      } catch (error) {
+        console.error('TTS Error:', error.message);
+        res.status(500).json({ error: `TTS failed: ${error.message}` });
+      }
+    });
+
     this.app.get('/api/session-status', (req, res) => {
       const tracking = this.state.sessionTracking;
       res.json({
@@ -1624,17 +2552,75 @@ class ClaudeManager {
       const content = await fs.readFile(filePath, 'utf-8');
       const lines = content.trim().split('\n').filter(line => line);
       const messages = [];
+      const sessions = new Map(); // Track sessions and their metrics
       
       for (const line of lines) {
         try {
           const entry = JSON.parse(line);
-          // Only track user messages as they start sessions
-          if (entry.type === 'user' && entry.message?.role === 'user') {
-            messages.push({
-              timestamp: new Date(entry.timestamp).getTime(),
-              sessionId: entry.sessionId
+          
+          // Initialize session tracking if not exists
+          if (!sessions.has(entry.sessionId)) {
+            sessions.set(entry.sessionId, {
+              sessionId: entry.sessionId,
+              userPrompts: 0,
+              assistantResponses: 0,
+              totalTokensUsed: 0,
+              inputTokens: 0,
+              outputTokens: 0,
+              startTimestamp: null,
+              lastActivity: null
             });
           }
+          
+          const sessionData = sessions.get(entry.sessionId);
+          const timestamp = new Date(entry.timestamp).getTime();
+          
+          // Update session activity time
+          if (!sessionData.startTimestamp) {
+            sessionData.startTimestamp = timestamp;
+          }
+          sessionData.lastActivity = timestamp;
+          
+          // Track user messages (prompts)
+          if (entry.type === 'user' && entry.message?.role === 'user') {
+            sessionData.userPrompts++;
+            
+            // Add message entry for session calculation
+            messages.push({
+              timestamp: timestamp,
+              sessionId: entry.sessionId,
+              sessionData: sessionData
+            });
+          }
+          
+          // Track assistant responses and token usage
+          if (entry.type === 'assistant' && entry.message?.role === 'assistant') {
+            sessionData.assistantResponses++;
+          }
+          
+          // Extract token usage from usage objects
+          if (entry.message && entry.message.usage) {
+            const usage = entry.message.usage;
+            if (usage.input_tokens) {
+              sessionData.inputTokens += usage.input_tokens;
+            }
+            if (usage.output_tokens) {
+              sessionData.outputTokens += usage.output_tokens;
+            }
+            // Calculate total tokens
+            sessionData.totalTokensUsed += (usage.input_tokens || 0) + (usage.output_tokens || 0);
+            
+            // Also include cache tokens if available
+            if (usage.cache_creation_input_tokens) {
+              sessionData.inputTokens += usage.cache_creation_input_tokens;
+              sessionData.totalTokensUsed += usage.cache_creation_input_tokens;
+            }
+            if (usage.cache_read_input_tokens) {
+              sessionData.inputTokens += usage.cache_read_input_tokens;
+              sessionData.totalTokensUsed += usage.cache_read_input_tokens;
+            }
+          }
+          
         } catch (e) {
           // Skip malformed lines
         }
@@ -1695,6 +2681,8 @@ class ClaudeManager {
     
     const sessions = [];
     let currentSessionStart = null;
+    let currentSessionData = null;
+    const sessionMetrics = new Map(); // Track cumulative metrics per session window
     
     // Calculate billing period start
     const now = new Date();
@@ -1711,16 +2699,38 @@ class ClaudeManager {
       if (message.timestamp < billingPeriodStartTime) continue;
       
       if (!currentSessionStart || message.timestamp - currentSessionStart > fiveHoursMs) {
-        // New session
+        // New session window
         currentSessionStart = message.timestamp;
-        sessions.push({
+        currentSessionData = {
           start: currentSessionStart,
-          end: Math.min(currentSessionStart + fiveHoursMs, Date.now())
-        });
+          end: Math.min(currentSessionStart + fiveHoursMs, Date.now()),
+          userPrompts: 0,
+          assistantResponses: 0,
+          totalTokensUsed: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          sessionIds: new Set()
+        };
+        sessions.push(currentSessionData);
+      }
+      
+      // Aggregate metrics from the session data
+      if (message.sessionData && currentSessionData) {
+        const sessionId = message.sessionData.sessionId;
+        
+        // Only count each session ID once per 5-hour window
+        if (!currentSessionData.sessionIds.has(sessionId)) {
+          currentSessionData.sessionIds.add(sessionId);
+          currentSessionData.userPrompts += message.sessionData.userPrompts;
+          currentSessionData.assistantResponses += message.sessionData.assistantResponses;
+          currentSessionData.totalTokensUsed += message.sessionData.totalTokensUsed;
+          currentSessionData.inputTokens += message.sessionData.inputTokens;
+          currentSessionData.outputTokens += message.sessionData.outputTokens;
+        }
       }
     }
     
-    // Update last session end time if it's current
+    // Update last session end time if it's current and add current session info
     if (sessions.length > 0) {
       const lastSession = sessions[sessions.length - 1];
       const now = Date.now();
@@ -1728,6 +2738,12 @@ class ClaudeManager {
         lastSession.end = now;
         lastSession.isActive = true;
       }
+      
+      // Convert sessionIds Set to count for serialization
+      sessions.forEach(session => {
+        session.uniqueSessionsCount = session.sessionIds.size;
+        delete session.sessionIds; // Remove Set for clean JSON
+      });
     }
     
     return { sessions, count: sessions.length };
@@ -1779,6 +2795,29 @@ class ClaudeManager {
       }
     }
     
+    // Get current and previous session metrics
+    const sessions = tracking.sessionHistory || [];
+    const currentSession = sessions.find(s => s.isActive) || null;
+    const previousSession = sessions.length > 1 ? sessions[sessions.length - 2] : null;
+    
+    // Cost calculation helper
+    const calculateCosts = (inputTokens, outputTokens) => {
+      // Sonnet 4 pricing: $3/MTok input, $15/MTok output
+      const sonnet4InputCost = (inputTokens / 1000000) * 3;
+      const sonnet4OutputCost = (outputTokens / 1000000) * 15;
+      const sonnet4Total = sonnet4InputCost + sonnet4OutputCost;
+      
+      // Opus 4 pricing (estimated): $15/MTok input, $75/MTok output
+      const opus4InputCost = (inputTokens / 1000000) * 15;
+      const opus4OutputCost = (outputTokens / 1000000) * 75;
+      const opus4Total = opus4InputCost + opus4OutputCost;
+      
+      return {
+        sonnet4: sonnet4Total,
+        opus4: opus4Total
+      };
+    };
+    
     return {
       enabled: tracking.enabled,
       isActive,
@@ -1786,7 +2825,30 @@ class ClaudeManager {
       timeRemaining,
       monthlySessions: tracking.monthlySessions,
       billingDate: tracking.billingDate,
-      lastScanned: tracking.lastScannedTimestamp
+      lastScanned: tracking.lastScannedTimestamp,
+      currentSession: currentSession ? {
+        userPrompts: currentSession.userPrompts,
+        assistantResponses: currentSession.assistantResponses,
+        totalTokensUsed: currentSession.totalTokensUsed,
+        inputTokens: currentSession.inputTokens,
+        outputTokens: currentSession.outputTokens,
+        uniqueSessionsCount: currentSession.uniqueSessionsCount,
+        start: currentSession.start,
+        end: currentSession.end,
+        costs: calculateCosts(currentSession.inputTokens, currentSession.outputTokens)
+      } : null,
+      previousSession: previousSession ? {
+        userPrompts: previousSession.userPrompts,
+        assistantResponses: previousSession.assistantResponses,
+        totalTokensUsed: previousSession.totalTokensUsed,
+        inputTokens: previousSession.inputTokens,
+        outputTokens: previousSession.outputTokens,
+        uniqueSessionsCount: previousSession.uniqueSessionsCount,
+        start: previousSession.start,
+        end: previousSession.end,
+        duration: previousSession.end - previousSession.start,
+        costs: calculateCosts(previousSession.inputTokens, previousSession.outputTokens)
+      } : null
     };
   }
 

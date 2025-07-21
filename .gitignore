@@ -29,9 +29,9 @@ session-tracking.json
 settings.json
 user.env
 
+
 # User-specific Claude directories
-.claude/settings.json
-.claude/settings.local.json
+.claude
 .mcp.json
 
 # Backup files

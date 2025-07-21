@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claude Manager</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f0f0f;
+            color: #e5e7eb;
+            line-height: 1.6;
+        }
+
+        .header {
+            background: #1a1a1a;
+            border-bottom: 1px solid #333;
+            padding: 1.5rem 2rem;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 500;
+            color: #fff;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .section {
+            background: #1a1a1a;
+            border-radius: 8px;
+            border: 1px solid #333;
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 500;
+            margin-bottom: 1.5rem;
+            color: #fff;
+        }
+
+        .project-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+        }
+
+        .project-card {
+            background: #262626;
+            border-radius: 6px;
+            border: 1px solid #404040;
+            padding: 1.5rem;
+            transition: border-color 0.2s;
+        }
+
+        .project-card:hover {
+            border-color: #525252;
+        }
+
+        .project-name {
+            font-weight: 500;
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+            color: #fff;
+        }
+
+        .project-path {
+            font-size: 0.875rem;
+            color: #9ca3af;
+            margin-bottom: 1rem;
+        }
+
+        .project-stats {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.875rem;
+            color: #d1d5db;
+        }
+
+        .stat {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .btn {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+
+        .btn:hover {
+            background: #2563eb;
+        }
+
+        .btn-secondary {
+            background: #6b7280;
+        }
+
+        .btn-secondary:hover {
+            background: #4b5563;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: #9ca3af;
+        }
+
+        .empty-state h3 {
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+            color: #d1d5db;
+        }
+
+        .nav {
+            display: flex;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .nav-item {
+            background: none;
+            border: none;
+            color: #9ca3af;
+            cursor: pointer;
+            font-size: 1rem;
+            padding: 0.5rem 0;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .nav-item.active {
+            color: #fff;
+            border-bottom-color: #3b82f6;
+        }
+
+        .nav-item:hover {
+            color: #d1d5db;
+        }
+
+        .content {
+            display: none;
+        }
+
+        .content.active {
+            display: block;
+        }
+
+        .session-info {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 1rem;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .session-count {
+            font-size: 2rem;
+            font-weight: 600;
+            color: #3b82f6;
+        }
+
+        .session-label {
+            font-size: 0.875rem;
+            color: #9ca3af;
+            margin-top: 0.25rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Claude Manager</h1>
+    </div>
+
+    <div class="container">
+        <div class="session-info">
+            <div class="session-count" id="sessionCount">0</div>
+            <div class="session-label">Sessions this month</div>
+        </div>
+
+        <nav class="nav">
+            <button class="nav-item active" onclick="showTab('projects')">Projects</button>
+            <button class="nav-item" onclick="showTab('mcp')">MCP Servers</button>
+            <button class="nav-item" onclick="showTab('commands')">Slash Commands</button>
+        </nav>
+
+        <div id="projects-content" class="content active">
+            <div class="section">
+                <div class="section-title">Projects</div>
+                <div id="projectList" class="project-list">
+                    <div class="empty-state">
+                        <h3>No projects registered</h3>
+                        <p>Register a project to get started</p>
+                        <br>
+                        <button class="btn" onclick="registerProject()">Register Project</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="mcp-content" class="content">
+            <div class="section">
+                <div class="section-title">MCP Servers</div>
+                <p>MCP server management coming soon...</p>
+            </div>
+        </div>
+
+        <div id="commands-content" class="content">
+            <div class="section">
+                <div class="section-title">Slash Commands</div>
+                <p>Command management coming soon...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showTab(tabName) {
+            // Hide all content
+            document.querySelectorAll('.content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Remove active from all nav items
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            
+            // Show selected content
+            document.getElementById(tabName + '-content').classList.add('active');
+            
+            // Add active to clicked nav item
+            event.target.classList.add('active');
+        }
+
+        function registerProject() {
+            // Placeholder for register project functionality
+            alert('Register project functionality would go here');
+        }
+
+        async function loadData() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                
+                // Update session count
+                document.getElementById('sessionCount').textContent = data.sessionStats?.monthlySessions || 0;
+                
+                // Update projects
+                const projectList = document.getElementById('projectList');
+                const projects = data.projects || {};
+                
+                if (Object.keys(projects).length === 0) {
+                    projectList.innerHTML = `
+                        <div class="empty-state">
+                            <h3>No projects registered</h3>
+                            <p>Register a project to get started</p>
+                            <br>
+                            <button class="btn" onclick="registerProject()">Register Project</button>
+                        </div>
+                    `;
+                } else {
+                    projectList.innerHTML = Object.entries(projects).map(([name, project]) => `
+                        <div class="project-card">
+                            <div class="project-name">${name}</div>
+                            <div class="project-path">${project.path}</div>
+                            <div class="project-stats">
+                                <div class="stat">
+                                    <span>📁</span>
+                                    <span>${project.type || 'Unknown'}</span>
+                                </div>
+                                <div class="stat">
+                                    <span>🔧</span>
+                                    <span>${Object.keys(project.config?.mcpServers || {}).length} MCP</span>
+                                </div>
+                                <div class="stat">
+                                    <span>⚡</span>
+                                    <span>${Object.keys(project.config?.commands || {}).length} Commands</span>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('Error loading data:', error);
+            }
+        }
+
+        // Load data on page load
+        loadData();
+        
+        // Refresh data every 30 seconds
+        setInterval(loadData, 30000);
+    </script>
+</body>
+</html>
