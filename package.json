@@ -2,26 +2,37 @@
   "name": "claude-manager",
   "version": "1.0.0",
   "description": "Monitor and manage Claude Code hooks, MCP servers, and CLAUDE.md files",
-  "main": "src/index.js",
+  "main": "backend/index.js",
   "bin": {
-    "claude-manager-register": "./src/register-project.js"
+    "claude-manager-register": "./backend/register-project.js"
   },
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "nodemon src/index.js",
-    "claude:register": "node src/register-project.js"
+    "start": "node backend/index.js",
+    "dev": "nodemon backend/index.js",
+    "claude:register": "node backend/register-project.js",
+    "frontend:install": "cd frontend && npm install",
+    "frontend:build": "cd frontend && npm run build",
+    "frontend:dev": "cd frontend && npm start",
+    "build": "npm run frontend:build"
   },
   "dependencies": {
+    "axios": "^1.11.0",
     "chokidar": "^3.5.3",
     "express": "^4.18.2",
-    "ws": "^8.14.2",
     "fs-extra": "^11.1.1",
-    "path": "^0.12.7"
+    "path": "^0.12.7",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
+    "nodemon": "^3.0.1",
+    "playwright": "^1.54.1"
   },
-  "keywords": ["claude", "monitoring", "hooks", "mcp"],
+  "keywords": [
+    "claude",
+    "monitoring",
+    "hooks",
+    "mcp"
+  ],
   "author": "Claude Manager",
   "license": "MIT"
 }

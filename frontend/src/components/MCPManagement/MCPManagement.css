@@ -1,0 +1,325 @@
+.mcp-management {
+  padding: 20px;
+  background: #1a1a1a;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.mcp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.mcp-header h3 {
+  color: #f0f0f0;
+  margin: 0;
+}
+
+.btn-primary {
+  background: #007acc;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #005a9e;
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: #666;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  margin-left: 8px;
+}
+
+.btn-secondary:hover {
+  background: #555;
+}
+
+.error-message {
+  background: #d73027;
+  color: white;
+  padding: 12px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+  position: relative;
+}
+
+.close-error {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  background: none;
+  border: none;
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.add-mcp-form {
+  background: #2a2a2a;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  border: 1px solid #444;
+}
+
+.add-mcp-form h4 {
+  color: #f0f0f0;
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
+.template-selector {
+  margin-bottom: 20px;
+}
+
+.template-selector label {
+  display: block;
+  color: #ccc;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.template-selector select {
+  width: 100%;
+  padding: 8px;
+  background: #333;
+  border: 1px solid #555;
+  border-radius: 4px;
+  color: #f0f0f0;
+  font-size: 14px;
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  color: #ccc;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 8px;
+  background: #333;
+  border: 1px solid #555;
+  border-radius: 4px;
+  color: #f0f0f0;
+  font-size: 14px;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #007acc;
+}
+
+.form-group small {
+  display: block;
+  color: #888;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.required {
+  color: #d73027;
+}
+
+.env-vars-section {
+  background: #1e1e1e;
+  padding: 16px;
+  border-radius: 6px;
+  margin: 16px 0;
+  border: 1px solid #444;
+}
+
+.env-vars-section h4 {
+  color: #f0f0f0;
+  margin-top: 0;
+  margin-bottom: 12px;
+  font-size: 16px;
+}
+
+.form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.loading {
+  text-align: center;
+  color: #ccc;
+  padding: 20px;
+  font-style: italic;
+}
+
+.mcp-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #2a2a2a;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #444;
+}
+
+.mcp-table th {
+  background: #333;
+  color: #f0f0f0;
+  padding: 12px;
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 1px solid #555;
+}
+
+.mcp-table td {
+  padding: 12px;
+  border-bottom: 1px solid #444;
+  color: #ccc;
+}
+
+.mcp-table tr:last-child td {
+  border-bottom: none;
+}
+
+.active-mcp {
+  background: rgba(0, 122, 204, 0.1);
+}
+
+.disabled-mcp {
+  background: rgba(255, 255, 255, 0.05);
+  opacity: 0.7;
+}
+
+.env-count {
+  background: #007acc;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.no-env {
+  color: #888;
+  font-style: italic;
+}
+
+.status {
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.status.enabled {
+  background: #28a745;
+  color: white;
+}
+
+.status.disabled {
+  background: #6c757d;
+  color: white;
+}
+
+.actions {
+  white-space: nowrap;
+}
+
+.actions button {
+  margin-right: 8px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.btn-enable {
+  background: #28a745;
+  color: white;
+}
+
+.btn-enable:hover:not(:disabled) {
+  background: #218838;
+}
+
+.btn-disable {
+  background: #ffc107;
+  color: #212529;
+}
+
+.btn-disable:hover:not(:disabled) {
+  background: #e0a800;
+}
+
+.btn-delete {
+  background: #dc3545;
+  color: white;
+}
+
+.btn-delete:hover:not(:disabled) {
+  background: #c82333;
+}
+
+.actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.no-mcps {
+  text-align: center;
+  color: #888;
+  font-style: italic;
+  padding: 40px 12px;
+}
+
+@media (max-width: 768px) {
+  .mcp-header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+  
+  .mcp-table {
+    font-size: 14px;
+  }
+  
+  .mcp-table th,
+  .mcp-table td {
+    padding: 8px;
+  }
+  
+  .actions {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  
+  .actions button {
+    margin-right: 0;
+  }
+}

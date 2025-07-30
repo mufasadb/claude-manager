@@ -1,0 +1,220 @@
+/* Dark theme styles for CLAUDE.md editor */
+.claude-md-editor {
+  margin-bottom: 20px;
+}
+
+.config-file {
+  background: #2d3748;
+  border: 1px solid #4a5568;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.config-header {
+  background: #4a5568;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #4a5568;
+}
+
+.config-header h4 {
+  margin: 0;
+  color: #e2e8f0;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.expand-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+  font-size: 14px;
+}
+
+.expand-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Preview Mode */
+.md-preview {
+  padding: 16px;
+  background: #1a202c;
+}
+
+.md-content {
+  margin: 0;
+  color: #e2e8f0;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* Editor Mode */
+.md-editor-container {
+  background: #2d3748;
+}
+
+.editor-header {
+  background: #4a5568;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #4a5568;
+}
+
+.editor-title {
+  color: #e2e8f0;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.editor-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.save-btn {
+  background: #38a169;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.save-btn:hover:not(:disabled) {
+  background: #2f855a;
+  transform: translateY(-1px);
+}
+
+.save-btn:disabled {
+  background: #4a5568;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.cancel-btn {
+  background: #4a5568;
+  color: #e2e8f0;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.cancel-btn:hover {
+  background: #718096;
+  transform: translateY(-1px);
+}
+
+.collapse-btn {
+  background: #3182ce;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.collapse-btn:hover {
+  background: #2c5282;
+  transform: translateY(-1px);
+}
+
+/* Error Display */
+.save-error {
+  background: #742a2a;
+  color: #fed7d7;
+  padding: 12px 16px;
+  border-bottom: 1px solid #4a5568;
+  font-size: 13px;
+}
+
+.save-error strong {
+  color: #fc8181;
+}
+
+/* Textarea Editor */
+.md-editor {
+  padding: 0;
+  background: #1a202c;
+}
+
+.md-textarea {
+  width: 100%;
+  min-height: 300px;
+  max-height: 600px;
+  padding: 16px;
+  background: #1a202c;
+  color: #e2e8f0;
+  border: none;
+  outline: none;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  box-sizing: border-box;
+}
+
+.md-textarea:focus {
+  box-shadow: inset 0 0 0 2px rgba(99, 179, 237, 0.25);
+}
+
+.md-textarea::placeholder {
+  color: #a0aec0;
+  font-style: italic;
+}
+
+/* Footer */
+.editor-footer {
+  background: #2d3748;
+  padding: 12px 16px;
+  border-top: 1px solid #4a5568;
+}
+
+.format-info {
+  color: #a0aec0;
+  font-size: 12px;
+  text-align: center;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .editor-actions {
+    flex-direction: column;
+    gap: 4px;
+  }
+  
+  .save-btn,
+  .cancel-btn,
+  .collapse-btn {
+    width: 100%;
+    text-align: center;
+  }
+  
+  .md-textarea {
+    min-height: 250px;
+    font-size: 14px;
+  }
+}

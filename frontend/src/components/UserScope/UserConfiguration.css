@@ -1,0 +1,221 @@
+.user-configuration {
+  width: 100%;
+}
+
+.config-file {
+  background: #2d3748;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  border: 1px solid #4a5568;
+}
+
+.config-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: #4a5568;
+  border-bottom: 1px solid #718096;
+}
+
+.config-header h4 {
+  margin: 0;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  color: #e2e8f0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.expand-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.expand-btn:hover {
+  background: #718096;
+  transform: scale(1.1);
+}
+
+.json-preview {
+  padding: 20px;
+  background: #2d3748;
+  border-bottom: 1px solid #4a5568;
+}
+
+.json-content {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 14px;
+  color: #e2e8f0;
+  background: #1a202c;
+  padding: 16px;
+  border-radius: 6px;
+  border: 1px solid #4a5568;
+  margin: 0;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.json-editor-container {
+  background: #2d3748;
+}
+
+.editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  background: #4a5568;
+  border-bottom: 1px solid #718096;
+}
+
+.editor-title {
+  font-weight: 600;
+  color: #e2e8f0;
+  font-size: 14px;
+}
+
+.editor-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.save-btn {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: background 0.2s ease;
+}
+
+.save-btn:hover:not(:disabled) {
+  background: #218838;
+}
+
+.save-btn:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.cancel-btn {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.cancel-btn:hover {
+  background: #545b62;
+}
+
+.collapse-btn {
+  background: #17a2b8;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.collapse-btn:hover {
+  background: #138496;
+}
+
+.validation-error {
+  background: #742a2a;
+  color: #feb2b2;
+  padding: 12px 20px;
+  border-bottom: 1px solid #9b2c2c;
+  font-size: 14px;
+}
+
+.validation-error strong {
+  font-weight: 600;
+}
+
+.json-editor {
+  padding: 0;
+}
+
+.json-textarea {
+  width: 100%;
+  min-height: 300px;
+  max-height: 600px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 20px;
+  border: none;
+  resize: vertical;
+  outline: none;
+  background: #1a202c;
+  color: #e2e8f0;
+  border-bottom: 1px solid #4a5568;
+}
+
+.json-textarea:focus {
+  background: #2d3748;
+  box-shadow: inset 0 0 0 2px rgba(99, 179, 237, 0.25);
+}
+
+.json-textarea.error {
+  background: #742a2a;
+  border-color: #9b2c2c;
+}
+
+.json-textarea.error:focus {
+  box-shadow: inset 0 0 0 2px rgba(220, 53, 69, 0.25);
+}
+
+.editor-footer {
+  padding: 12px 20px;
+  background: #4a5568;
+  border-top: 1px solid #718096;
+}
+
+.format-info {
+  font-size: 12px;
+  color: #a0aec0;
+  font-style: italic;
+}
+
+/* Syntax highlighting for JSON in preview */
+.json-content {
+  tab-size: 2;
+}
+
+/* Better scrollbar for textarea */
+.json-textarea::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.json-textarea::-webkit-scrollbar-track {
+  background: #2d3748;
+}
+
+.json-textarea::-webkit-scrollbar-thumb {
+  background: #718096;
+  border-radius: 4px;
+}
+
+.json-textarea::-webkit-scrollbar-thumb:hover {
+  background: #a0aec0;
+}

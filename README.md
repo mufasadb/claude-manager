@@ -1,237 +1,298 @@
 # Claude Manager
 
-Web-based dashboard for monitoring and managing Claude Code configurations, MCP servers, hooks, and session tracking across multiple projects.
+A comprehensive web-based dashboard for managing Claude Code environments across multiple projects. Monitor configurations, set up automated hooks, manage MCP servers, and track session usage with real-time updates.
 
-## Features
+## What is Claude Manager?
 
-### Project Management
-- **Global Registration**: Register any project from any directory
-- **Project Tracking**: Maintains a registry of all your projects with metadata
-- **Config Monitoring**: Real-time watching of `.claude/settings.json` and `CLAUDE.md` files
-- **Auto-detection**: Detects project type (Node.js, Python, Rust, Go)
+Claude Manager is a centralized control panel that simplifies working with Claude Code across multiple projects. Instead of manually configuring each project, you get:
 
-### MCP Server Management  
-- **30+ Templates**: Pre-configured MCP servers (Playwright, Supabase, GitHub, etc.)
-- **Auto-installation**: Handles `npm install` and dependency setup
-- **Environment Setup**: Automatic .env configuration for API keys
-- **Scope Control**: Install globally or per-project
+- **Global Project Registry**: Register any project from anywhere and manage all Claude configurations from one dashboard
+- **MCP Server Management**: Add, configure, and manage Model Context Protocol servers with popular templates
+- **Automated Hooks**: Set up code formatting, testing, and safety checks that run automatically
+- **Session Tracking**: Monitor your Claude Code usage against plan limits with real-time countdowns
+- **Environment Management**: Centralized API key and environment variable management
+- **CLAUDE.md Editor**: Built-in editor for project documentation with live preview and syntax highlighting
 
-### Hook Management
-- **Safety Hooks**: Prevent dangerous commands, API key exposure
-- **Auto-formatting**: Black, Prettier, Go fmt integration  
-- **Testing Hooks**: Run tests after code changes
-- **Git Integration**: Auto-staging, commit validation
+## Quick Start
 
-### Session Tracking
-- **Usage Monitoring**: Track Claude Code 5-hour sessions
-- **Plan Limits**: Pro (45 sessions), Max-5x (225), Max-20x (900)
-- **Billing Periods**: Monthly usage tracking with estimates
-- **Real-time Countdown**: Active session time remaining
+### Installation
 
-## Installation
-
-1. Clone this repository:
+1. **Clone and install**:
    ```bash
    git clone https://github.com/callmebeachy/claude-manager.git
    cd claude-manager
-   ```
-
-2. Install dependencies:
-   ```bash
    npm install
    ```
 
-3. Set up configuration files:
+2. **Set up configuration**:
    ```bash
-   # Create the ~/.claude-manager directory
+   # Create config directory and copy examples
    mkdir -p ~/.claude-manager
+   cp examples/*.example ~/.claude-manager/
    
-   # Copy example files
-   cp examples/registry.json.example ~/.claude-manager/registry.json
-   cp examples/session-tracking.json.example ~/.claude-manager/session-tracking.json
-   cp examples/settings.json.example ~/.claude-manager/settings.json
-   cp examples/user.env.example ~/.claude-manager/user.env
+   # Remove .example extensions
+   cd ~/.claude-manager
+   for file in *.example; do mv "$file" "${file%.example}"; done
    
-   # Edit user.env with your actual API keys
+   # Edit user.env with your API keys
    nano ~/.claude-manager/user.env
    ```
 
-4. Install global commands (optional):
+3. **Install global commands** (optional but recommended):
    ```bash
    ./install.sh
-   source ~/.zshrc  # or ~/.bashrc, ~/.bash_profile depending on your shell
+   source ~/.zshrc  # or ~/.bashrc
    ```
-
-## Usage
 
 ### Start the Dashboard
 
 ```bash
-# Development mode (with hot reload)
+# Build frontend first
+npm run frontend:build
+
+# Development mode (backend with hot reload)
 npm run dev
 
-# Production mode
+# Production mode  
 npm start
 ```
 
-Open your browser to **http://localhost:3456** to access the dashboard.
+Open **http://localhost:3455** in your browser.
 
-### Registering Projects
-
-Navigate to any project directory and register it:
-
+**For frontend development:**
 ```bash
-cd /path/to/your/project
-cm-reg                      # Register with directory name
-cm-reg my-custom-name       # Register with custom name
-cm-unreg                    # Unregister current directory
-cm-unreg my-project-name    # Unregister specific project
+# Start React dev server (port 3456) with backend proxy
+npm run frontend:dev
+# Backend runs on port 3455, frontend dev server on 3456
 ```
 
-Or use the npm script:
+## Core Features
+
+### Project Management
+Register any project from anywhere and manage all your Claude configurations centrally:
+
 ```bash
-npm run claude:register
+cd /path/to/any/project
+cm-reg                    # Register with directory name
+cm-reg my-project-name    # Register with custom name
+cm-unreg                  # Unregister current directory
 ```
 
-### Environment Variables
-
-#### User-Level Variables
-Global environment variables stored in `~/.claude-manager/user.env`:
-- API keys for GitHub, OpenAI, Supabase, etc.
-- Shared configuration across all projects
-- Automatically loaded by MCP servers
-
-#### Project-Level Variables  
-Project-specific variables in each project's `.env` file:
-- Database connections
-- API endpoints
-- Feature flags
-
-### Session Tracking
-
-Enable session tracking to monitor your Claude Code usage:
-
-1. **Enable in Dashboard**: Toggle "Session Tracking" in the header
-2. **Configure Plan**: Set your Claude plan type (Pro/Max-5x/Max-20x)
-3. **Set Billing Period**: Choose your billing cycle start date
-
-The system automatically tracks:
-- 5-hour session starts
-- Monthly usage statistics
-- Real-time countdown for active sessions
-- Plan limit warnings
+The dashboard automatically detects project types and monitors config changes in real-time via WebSocket connections. Each project gets:
+- Live monitoring of `.claude/settings.json` changes
+- Real-time CLAUDE.md file editing with preview
+- Project-specific environment variable management
+- Dedicated MCP server configurations
 
 ### MCP Server Management
 
-Install MCP servers from 30+ pre-configured templates:
+Manage Model Context Protocol servers that extend Claude Code's capabilities:
 
-1. **Browse Templates**: View available servers in the dashboard
-2. **Choose Scope**: Install globally or per-project
-3. **Auto-Setup**: Dependencies and environment variables configured automatically
-4. **Instant Use**: Servers ready for Claude Code immediately
+**Built-in Templates:**
+- **Supabase** - Database queries and operations
+- **Neo4j** - Graph database with Cypher queries
+- **Playwright/Puppeteer** - Browser automation and testing
+- **GitHub** - Repository and issue management
+- **PostgreSQL** - Direct database connections
+- **Notion** - Workspace integration
+- **Figma** - Design file access and manipulation
 
-Popular templates:
-- **Playwright**: Browser automation
-- **Supabase**: Database and API access
-- **GitHub**: Repository management
-- **Filesystem**: File operations
-- **Memory**: Persistent knowledge graphs
+### CLAUDE.md Management
 
-### Hook Management
+Edit project documentation directly in the dashboard:
 
-Set up automated workflows that trigger on Claude actions:
+**Features:**
+- Built-in markdown editor with syntax highlighting
+- Live preview with real-time rendering
+- Auto-save functionality
+- Dark theme optimized for development
+- WebSocket synchronization across multiple clients
+- Support for both project-level and user-level CLAUDE.md files
 
-#### Safety Hooks
+**Features:**
+- Quick setup with pre-configured templates
+- Environment variable prompting (API keys, connection strings)
+- Enable/disable servers without losing configuration
+- User-level and project-specific scopes
+- Real-time status monitoring
+
+### Hook System
+
+Automate workflows that trigger on Claude actions:
+
+**Safety Hooks:**
 - Block dangerous commands (`rm -rf`, `sudo`)
-- Prevent API key exposure
-- Validate file permissions
+- Prevent API key exposure in code
+- Validate file permissions before writes
 
-#### Formatting Hooks
+**Code Quality Hooks:**
 - Auto-format with Black, Prettier, Go fmt
-- Run linters (ESLint, Ruff)
-- Consistent code style
+- Run linters (ESLint, Ruff) automatically
+- Execute tests after code changes
 
-#### Git Integration
-- Auto-stage modified files
-- Run tests before commits
-- Push to remote repositories
+**Git Integration:**
+- Auto-stage modified files  
+- Run pre-commit validation
+- Push changes to remote repositories
+
+### Session Tracking
+
+Monitor Claude Code usage against your plan limits:
+
+- **Real-time Countdown**: See time remaining in current 5-hour session
+- **Plan Awareness**: Tracks limits for Pro (45), Max-5x (225), Max-20x (900)
+- **Monthly Statistics**: Usage history with configurable billing periods
+- **Automatic Detection**: Monitors Claude Code session files automatically
+
+### Environment Variables
+
+Centralized management of API keys and configuration:
+
+**User-Level Variables** (`~/.claude-manager/user.env`):
+- Shared across all projects
+- API keys for GitHub, OpenAI, Supabase, etc.
+
+**Project-Level Variables** (`.env` in each project):
+- Project-specific database URLs, endpoints
+- Feature flags and local configuration
+- Overrides user-level settings
+
+**Features:**
+- Masked display of sensitive values in the dashboard
+- Copy variables between user and project scopes
+- Real-time validation and error checking
+- Integration with MCP server environment requirements
+
+## Common Workflows
+
+### Setting Up a New Project
+
+1. **Navigate to project**: `cd /path/to/my-project`
+2. **Register project**: `cm-reg my-project`  
+3. **Open dashboard**: Visit http://localhost:3455
+4. **Add MCP servers**: Connect to databases and external services
+5. **Add hooks**: Set up auto-formatting and safety checks
+6. **Configure environment**: Add any required API keys
+
+### Managing Multiple Projects
+
+The dashboard provides a unified view of all registered projects with:
+- Real-time config monitoring
+- Quick access to settings files  
+- Environment variable management
+
+### Working with Teams
+
+1. **Standardize hooks**: Use common hook presets across team
+2. **Environment setup**: Copy user-level variables to project-specific
+3. **Session coordination**: Track team usage patterns
 
 ## Configuration Files
 
-### Example File Structure
 ```
 ~/.claude-manager/
-├── registry.json          # Project registry
-├── session-tracking.json  # Usage statistics
-├── settings.json          # Dashboard settings
+├── registry.json          # Project registry and metadata
+├── session-tracking.json  # Usage statistics and history  
+├── settings.json          # Dashboard preferences
 └── user.env              # Global environment variables
 
 your-project/
 ├── .claude/
-│   ├── settings.json      # Project-specific Claude settings
-│   └── settings.local.json # Local overrides
+│   ├── settings.json      # Claude Code configuration
+│   └── settings.local.json # Local overrides (optional)
 ├── .env                   # Project environment variables
-└── CLAUDE.md             # Project instructions
+└── CLAUDE.md             # Project-specific instructions
 ```
 
-See the `examples/` directory for template files you can copy and customize.
+## API Integration
 
-## API Endpoints
+The dashboard exposes a REST API for automation and integration:
 
-The dashboard provides a REST API for automation:
+```bash
+# Register project programmatically
+curl -X POST localhost:3455/api/register-project \
+  -H "Content-Type: application/json" \
+  -d '{"name": "my-project", "path": "/path/to/project"}'
 
-### Project Management
-- `POST /api/register-project` - Register new project
-- `POST /api/unregister-project` - Remove project
-- `GET /api/status` - Full system state
+# Add MCP server
+curl -X POST localhost:3455/api/mcp/add \
+  -H "Content-Type: application/json" \
+  -d '{"scope": "user", "mcpConfig": {"name": "my-db", "command": "npx @supabase/mcp-server", "envVars": {"SUPABASE_URL": "..."}}}' 
 
-### Session Tracking
-- `POST /api/toggle-session-tracking` - Enable/disable tracking
-- `POST /api/session-event` - Record session events
-- `GET /api/session-stats` - Usage statistics
-- `GET /api/countdown` - Active session countdown
+# Get system status
+curl localhost:3455/api/status
 
-### MCP & Hooks
-- `GET /api/mcp-templates` - Available MCP servers
-- `POST /api/add-mcp-server` - Install MCP server
-- `GET /api/common-hooks` - Hook presets library
-- `POST /api/add-hook` - Add hook to settings
+# List MCP servers
+curl localhost:3455/api/mcp/list/user
+
+# Enable session tracking  
+curl -X POST localhost:3455/api/toggle-session-tracking \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true}'
+```
 
 ## Requirements
 
 - **Node.js** 16+ and npm
-- **Claude Code CLI** (for MCP server management)
+- **Claude Code CLI** installed and configured
 - **Git** (optional, for remote URL detection)
-- **macOS/Linux** (Windows with WSL)
+- **macOS or Linux** (Windows via WSL)
 
 ## Development
 
 ```bash
 # Install dependencies
 npm install
+npm run frontend:install  # Install React dependencies
 
-# Start development server with hot reload
+# Build frontend for production
+npm run frontend:build
+
+# Start backend with hot reload
 npm run dev
+
+# For frontend development (React dev server)
+npm run frontend:dev
 
 # View logs
 tail -f server.log
+
+# Register current directory for testing
+npm run claude:register
 ```
+
+**Architecture:**
+- **Backend**: Node.js Express server (port 3455) with WebSocket support
+- **Frontend**: React TypeScript app with development server (port 3456)
+- **Real-time**: WebSocket communication for live updates
+- **File Watching**: Chokidar monitors configuration file changes
+
+## Troubleshooting
+
+**Dashboard not loading?**
+- Ensure port 3455 is available
+- Check `server.log` for errors
+
+**Projects not registering?**
+- Verify `.claude/` directory exists in project
+- Check file permissions on config directories
+
+**MCP servers not working?**
+- Ensure Claude Code is installed and in PATH
+- Check environment variables are correctly set
+- Verify MCP server packages are available (e.g., `npx @supabase/mcp-server --help`)
+
+**Session tracking not updating?**
+- Enable tracking in dashboard header
+- Verify `~/.claude/projects/` directory exists
+- Check WebSocket connection in browser dev tools
 
 ## Contributing
 
 1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Follow the existing code style and patterns
+2. Create feature branch (`git checkout -b feature/amazing-feature`)  
+3. Follow existing code patterns
 4. Add tests for new functionality
-5. Commit your changes (`git commit -m 'Add amazing feature'`)
-6. Push to the branch (`git push origin feature/amazing-feature`)
-7. Open a Pull Request
+5. Submit pull request
 
-## Supported Project Types
-
-Auto-detection supports:
-- **Node.js** (package.json)
-- **Python** (requirements.txt, pyproject.toml)
-- **Rust** (Cargo.toml)
-- **Go** (go.mod)
-- **Generic** (fallback)
+See `CLAUDE.md` for detailed development guidelines and architecture overview.

@@ -1,0 +1,317 @@
+.hook-builder {
+  background: #1e1e1e;
+  border-radius: 8px;
+  padding: 24px;
+  color: #e0e0e0;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.hook-builder-content {
+  min-height: 500px;
+}
+
+.hook-setup h3,
+.hook-review h3,
+.hook-saved h3 {
+  color: #4fc3f7;
+  margin-bottom: 24px;
+  font-size: 1.5rem;
+}
+
+/* Template Section */
+.template-section {
+  margin-bottom: 32px;
+}
+
+.template-section h4 {
+  color: #81c784;
+  margin-bottom: 16px;
+  font-size: 1.1rem;
+}
+
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.template-card {
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 6px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.template-card:hover {
+  background: #333;
+  border-color: #4fc3f7;
+}
+
+.template-card h5 {
+  color: #4fc3f7;
+  margin: 0 0 8px 0;
+  font-size: 1rem;
+}
+
+.template-card p {
+  color: #b0b0b0;
+  margin: 0 0 12px 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.template-event-type {
+  background: #424242;
+  color: #81c784;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+/* Form Styling */
+.hook-config {
+  background: #262626;
+  border-radius: 6px;
+  padding: 20px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  color: #81c784;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 10px 12px;
+  background: #1a1a1a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #e0e0e0;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #4fc3f7;
+  box-shadow: 0 0 0 2px rgba(79, 195, 247, 0.2);
+}
+
+.form-group small {
+  display: block;
+  color: #888;
+  margin-top: 4px;
+  font-size: 0.85rem;
+}
+
+.form-group textarea {
+  resize: vertical;
+  min-height: 100px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+/* Hook Review */
+.hook-info {
+  background: #262626;
+  border-radius: 6px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.hook-info h4 {
+  color: #4fc3f7;
+  margin: 0 0 12px 0;
+}
+
+.hook-info p {
+  margin: 8px 0;
+  color: #b0b0b0;
+}
+
+.hook-info p strong {
+  color: #e0e0e0;
+}
+
+.code-editor {
+  margin-bottom: 24px;
+}
+
+.code-editor h4 {
+  color: #81c784;
+  margin-bottom: 12px;
+}
+
+.code-textarea {
+  width: 100%;
+  padding: 16px;
+  background: #1a1a1a;
+  border: 1px solid #444;
+  border-radius: 6px;
+  color: #e0e0e0;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.code-textarea:focus {
+  outline: none;
+  border-color: #4fc3f7;
+  box-shadow: 0 0 0 2px rgba(79, 195, 247, 0.2);
+}
+
+/* Success Message */
+.hook-saved {
+  text-align: center;
+}
+
+.success-message {
+  background: rgba(129, 199, 132, 0.1);
+  border: 1px solid #81c784;
+  border-radius: 6px;
+  padding: 24px;
+  margin-bottom: 32px;
+}
+
+.success-message h3 {
+  color: #81c784;
+  margin-bottom: 16px;
+}
+
+.success-message p {
+  color: #b0b0b0;
+  margin: 8px 0;
+  line-height: 1.5;
+}
+
+.success-message p strong {
+  color: #e0e0e0;
+}
+
+/* Buttons */
+.button-group {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+.button-group button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.generate-button,
+.save-button,
+.create-another-button {
+  background: #4fc3f7;
+  color: #000;
+}
+
+.generate-button:hover,
+.save-button:hover,
+.create-another-button:hover {
+  background: #29b6f6;
+}
+
+.generate-button:disabled,
+.save-button:disabled {
+  background: #424242;
+  color: #666;
+  cursor: not-allowed;
+}
+
+.regenerate-button {
+  background: #ff9800;
+  color: #000;
+}
+
+.regenerate-button:hover {
+  background: #f57c00;
+}
+
+.back-button,
+.cancel-button {
+  background: #666;
+  color: #e0e0e0;
+}
+
+.back-button:hover,
+.cancel-button:hover {
+  background: #555;
+}
+
+.done-button {
+  background: #81c784;
+  color: #000;
+}
+
+.done-button:hover {
+  background: #66bb6a;
+}
+
+/* Error Message */
+.error-message {
+  background: rgba(244, 67, 54, 0.1);
+  color: #f44336;
+  border: 1px solid #f44336;
+  border-radius: 4px;
+  padding: 12px;
+  margin: 16px 0;
+  font-size: 14px;
+}
+
+/* Responsive Design */
+@media (max-width: 600px) {
+  .hook-builder {
+    padding: 16px;
+  }
+  
+  .template-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .button-group {
+    flex-direction: column;
+  }
+  
+  .button-group button {
+    width: 100%;
+  }
+}
+
+/* Animation for step transitions */
+.hook-builder-content > * {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

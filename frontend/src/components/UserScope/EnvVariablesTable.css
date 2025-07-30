@@ -1,0 +1,364 @@
+.env-vars-table-container {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.env-vars-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #2d3748;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.env-vars-table th {
+  background: #4a5568;
+  color: #e2e8f0;
+  font-weight: 600;
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 2px solid #718096;
+}
+
+.env-vars-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #4a5568;
+  vertical-align: middle;
+  background: #2d3748;
+  color: #e2e8f0;
+}
+
+.env-vars-table tbody tr:hover {
+  background: #4a5568;
+}
+
+.env-var-key {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-weight: 600;
+  color: #63b3ed;
+}
+
+.env-var-value {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  color: #a0aec0;
+  min-width: 200px;
+}
+
+.masked-value {
+  background: #4a5568;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid #718096;
+  color: #e2e8f0;
+}
+
+.env-var-actions {
+  white-space: nowrap;
+  text-align: right;
+  width: 120px;
+}
+
+.action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 6px;
+  margin: 0 2px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.action-btn:hover {
+  background: #4a5568;
+  transform: scale(1.1);
+}
+
+.copy-btn:hover {
+  background: #38a169;
+}
+
+.edit-btn:hover {
+  background: #d69e2e;
+}
+
+.push-btn:hover {
+  background: #3182ce;
+}
+
+.delete-btn:hover {
+  background: #e53e3e;
+}
+
+.edit-input-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.edit-input {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid #718096;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 14px;
+  background: #2d3748;
+  color: #e2e8f0;
+}
+
+.edit-input:focus {
+  outline: none;
+  border-color: #63b3ed;
+  box-shadow: 0 0 0 2px rgba(99, 179, 237, 0.25);
+}
+
+.edit-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.save-btn {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.save-btn:hover {
+  background: #218838;
+}
+
+.cancel-btn {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.cancel-btn:hover {
+  background: #545b62;
+}
+
+.delete-confirm-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.delete-confirm-dialog {
+  background: #2d3748;
+  padding: 24px;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  max-width: 400px;
+  width: 90%;
+  border: 1px solid #4a5568;
+}
+
+.delete-confirm-dialog h3 {
+  margin: 0 0 12px 0;
+  color: #feb2b2;
+  font-size: 18px;
+}
+
+.delete-confirm-dialog p {
+  margin: 0 0 20px 0;
+  color: #e2e8f0;
+  line-height: 1.4;
+}
+
+.delete-confirm-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.confirm-delete-btn {
+  background: #dc3545;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.confirm-delete-btn:hover {
+  background: #c82333;
+}
+
+.cancel-delete-btn {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.cancel-delete-btn:hover {
+  background: #545b62;
+}
+
+.push-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.push-modal-dialog {
+  background: #2d3748;
+  padding: 24px;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  max-width: 500px;
+  width: 90%;
+  border: 1px solid #4a5568;
+}
+
+.push-modal-dialog h3 {
+  margin: 0 0 12px 0;
+  color: #63b3ed;
+  font-size: 18px;
+}
+
+.push-modal-dialog p {
+  margin: 0 0 20px 0;
+  color: #e2e8f0;
+  line-height: 1.4;
+}
+
+.push-form {
+  margin-bottom: 20px;
+}
+
+.push-form label {
+  display: block;
+  color: #e2e8f0;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.project-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #718096;
+  border-radius: 4px;
+  background: #4a5568;
+  color: #e2e8f0;
+  font-size: 14px;
+}
+
+.project-select:focus {
+  outline: none;
+  border-color: #63b3ed;
+  box-shadow: 0 0 0 2px rgba(99, 179, 237, 0.25);
+}
+
+.push-status {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.push-status.success {
+  background: #22543d;
+  color: #68d391;
+  border: 1px solid #38a169;
+}
+
+.push-status.warning {
+  background: #744210;
+  color: #fbb045;
+  border: 1px solid #d69e2e;
+}
+
+.push-status.error {
+  background: #742a2a;
+  color: #feb2b2;
+  border: 1px solid #e53e3e;
+}
+
+.push-modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.confirm-push-btn {
+  background: #3182ce;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.confirm-push-btn:hover:not(:disabled) {
+  background: #2c5aa0;
+}
+
+.confirm-push-btn:disabled {
+  background: #4a5568;
+  color: #a0aec0;
+  cursor: not-allowed;
+}
+
+.cancel-push-btn {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.cancel-push-btn:hover:not(:disabled) {
+  background: #545b62;
+}
+
+.cancel-push-btn:disabled {
+  background: #4a5568;
+  color: #a0aec0;
+  cursor: not-allowed;
+}
+
+.no-data {
+  text-align: center;
+  color: #a0aec0;
+  font-style: italic;
+  padding: 32px;
+  background: #2d3748;
+  border-radius: 8px;
+  margin-top: 10px;
+  border: 1px solid #4a5568;
+}

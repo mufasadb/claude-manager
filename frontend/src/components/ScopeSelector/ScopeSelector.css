@@ -1,0 +1,65 @@
+.target-selector {
+  margin-bottom: 1rem;
+}
+
+.target-tabs {
+  display: flex;
+  border: 1px solid #374151;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #1f2937;
+  margin-bottom: 1rem;
+}
+
+.target-tab {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  background: #1f2937;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  border-right: 1px solid #374151;
+}
+
+.target-tab:last-child {
+  border-right: none;
+}
+
+.target-tab:hover {
+  background: #374151;
+  color: #e5e7eb;
+}
+
+.target-tab.active {
+  background: #059669;
+  color: white;
+}
+
+.project-selector {
+  margin-top: 0.5rem;
+}
+
+.project-select {
+  width: 100%;
+  padding: 0.75rem;
+  background: #374151;
+  border: 1px solid #4b5563;
+  border-radius: 6px;
+  color: #e5e7eb;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.project-select:focus {
+  outline: none;
+  border-color: #059669;
+  box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.2);
+}
+
+.project-select option {
+  background: #374151;
+  color: #e5e7eb;
+}

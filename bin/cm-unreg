@@ -138,10 +138,10 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
 fi
 
 # Try to unregister via API first (if claude-manager is running)
-if curl -s --connect-timeout 2 http://localhost:3456/api/status > /dev/null 2>&1; then
+if curl -s --connect-timeout 2 http://localhost:3455/api/status > /dev/null 2>&1; then
     log_info "Claude Manager is running, unregistering via API..."
     
-    RESPONSE=$(curl -s -X POST http://localhost:3456/api/unregister-project \
+    RESPONSE=$(curl -s -X POST http://localhost:3455/api/unregister-project \
         -H "Content-Type: application/json" \
         -d "{\"name\": \"$TARGET_NAME\"}" \
         --write-out "HTTPSTATUS:%{http_code}")
