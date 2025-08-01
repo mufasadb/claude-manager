@@ -28,6 +28,7 @@ const AgentCreator: React.FC<AgentCreatorProps> = ({ projects }) => {
   const [templates, setTemplates] = useState<AgentTemplate | null>(null);
   const [availableTools, setAvailableTools] = useState<string[]>([]);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [showHelpModal, setShowHelpModal] = useState(false);
 
   useEffect(() => {
     loadTemplates();
@@ -479,14 +480,48 @@ const AgentCreator: React.FC<AgentCreatorProps> = ({ projects }) => {
 
           {/* Description */}
           <div>
-            <label style={{ color: '#ffffff', display: 'block', marginBottom: '8px' }}>
-              Description *
-            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              <label style={{ color: '#ffffff', margin: '0' }}>
+                Description *
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowHelpModal(true)}
+                style={{
+                  backgroundColor: '#444',
+                  color: '#fff',
+                  border: '1px solid #666',
+                  borderRadius: '50%',
+                  width: '24px',
+                  height: '24px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                title="Show agent creation help"
+              >
+                ?
+              </button>
+            </div>
             <textarea
               value={formData.description}
               onChange={(e) => handleInputChange('description', e.target.value)}
-              placeholder="A specialized agent for hunting down bugs and debugging complex issues. Helps with error analysis, troubleshooting, and providing solutions."
-              rows={4}
+              placeholder={`Describe your agent following these key elements:
+
+• Specific Role & Expertise - What domain does this agent specialize in? (e.g., "Python security code reviewer" not "helpful assistant")
+
+• Core Capabilities - What are the 3-5 main things it can do? Include specific examples and use cases
+
+• Tool Usage Guidelines - How should it use available tools? When to use each one and what validation is needed?
+
+• Boundaries & Limitations - What can't or won't it do? What are the safety constraints and escalation rules?
+
+• Success Criteria - How will you know if this agent is working well? What constitutes good performance vs failure?
+
+Focus on specialization over generalization - agents that do one thing excellently outperform those that try to do everything.`}
+              rows={8}
               style={{
                 width: '100%',
                 padding: '10px',
@@ -494,7 +529,10 @@ const AgentCreator: React.FC<AgentCreatorProps> = ({ projects }) => {
                 color: '#ffffff',
                 border: validationErrors.description ? '2px solid #f44336' : '1px solid #666',
                 borderRadius: '4px',
-                resize: 'vertical'
+                resize: 'vertical',
+                fontFamily: 'inherit',
+                fontSize: '14px',
+                lineHeight: '1.4'
               }}
             />
             {validationErrors.description && (
@@ -503,7 +541,7 @@ const AgentCreator: React.FC<AgentCreatorProps> = ({ projects }) => {
               </div>
             )}
             <div style={{ color: '#888', fontSize: '14px', marginTop: '4px' }}>
-              Describe what this agent should do - Claude will generate a specialized prompt based on this
+              Claude will generate a specialized system message based on this description. Click the ? for detailed guidance.
             </div>
           </div>
 
@@ -590,6 +628,134 @@ const AgentCreator: React.FC<AgentCreatorProps> = ({ projects }) => {
           </button>
         </div>
       </form>
+
+      {/* Help Modal */}
+      {showHelpModal && (
+        <div style={{
+          position: 'fixed',
+          top: '0',
+          left: '0',
+          right: '0',
+          bottom: '0',
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: '#2d2d2d',
+            borderRadius: '8px',
+            padding: '24px',
+            maxWidth: '800px',
+            maxHeight: '80vh',
+            overflowY: 'auto',
+            border: '1px solid #666'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 style={{ color: '#fff', margin: '0' }}>Agent Creation Guide</h2>
+              <button
+                onClick={() => setShowHelpModal(false)}
+                style={{
+                  backgroundColor: '#666',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '4px',
+                  padding: '8px 12px',
+                  cursor: 'pointer'
+                }}
+              >
+                Close
+              </button>
+            </div>
+            
+            <div style={{ color: '#ccc', lineHeight: '1.6' }}>
+              <p style={{ marginBottom: '16px' }}>Based on research from Anthropic and community best practices, here's what you need to capture:</p>
+              
+              <h3 style={{ color: '#4CAF50', margin: '20px 0 12px 0' }}>🎯 Core Identity & Boundaries</h3>
+              <ul style={{ marginLeft: '20px', marginBottom: '16px' }}>
+                <li><strong>Specific role</strong> - "Python debugging specialist" not "helpful assistant"</li>
+                <li><strong>Clear capabilities</strong> - what it CAN do with examples</li>
+                <li><strong>Explicit limitations</strong> - what it CANNOT or should not do</li>
+                <li><strong>Success criteria</strong> - how to measure if it's working well</li>
+              </ul>
+              
+              <h3 style={{ color: '#4CAF50', margin: '20px 0 12px 0' }}>🛠️ Tool Usage Protocol</h3>
+              <p style={{ marginBottom: '8px' }}>For each tool the agent can use:</p>
+              <ul style={{ marginLeft: '20px', marginBottom: '16px' }}>
+                <li><strong>When</strong> to use it (specific triggers)</li>
+                <li><strong>Why</strong> to use it (expected outcome)</li>
+                <li><strong>How</strong> to use it (validation steps)</li>
+                <li><strong>Fallbacks</strong> when tools fail</li>
+              </ul>
+              
+              <h3 style={{ color: '#4CAF50', margin: '20px 0 12px 0' }}>🧠 Context Management</h3>
+              <ul style={{ marginLeft: '20px', marginBottom: '16px' }}>
+                <li><strong>What to remember</strong> (goals, user preferences, key decisions)</li>
+                <li><strong>What to summarize</strong> (long conversations into key points)</li>
+                <li><strong>What to forget</strong> (completed tasks, irrelevant details)</li>
+                <li><strong>Size limits</strong> (prevent context explosion)</li>
+              </ul>
+              
+              <h3 style={{ color: '#4CAF50', margin: '20px 0 12px 0' }}>⚠️ Error Handling & Safety</h3>
+              <ul style={{ marginLeft: '20px', marginBottom: '16px' }}>
+                <li><strong>Primary approach</strong> for normal operations</li>
+                <li><strong>Fallback strategies</strong> when things go wrong</li>
+                <li><strong>Safety constraints</strong> (Constitutional AI principles)</li>
+                <li><strong>Escalation rules</strong> (when to ask humans for help)</li>
+              </ul>
+              
+              <h3 style={{ color: '#f44336', margin: '20px 0 12px 0' }}>🚫 Avoid These Anti-Patterns</h3>
+              <div style={{ backgroundColor: '#1e1e1e', padding: '12px', borderRadius: '4px', marginBottom: '16px' }}>
+                <p style={{ margin: '0 0 8px 0' }}>❌ <strong>"God Agent"</strong> - trying to do everything</p>
+                <p style={{ margin: '0 0 8px 0', color: '#4CAF50' }}>✅ <strong>Specialist</strong> - focused on specific domain</p>
+                <p style={{ margin: '0 0 8px 0' }}>❌ <strong>Vague helper</strong> - "assists with tasks"</p>
+                <p style={{ margin: '0 0 8px 0', color: '#4CAF50' }}>✅ <strong>Specific role</strong> - "analyzes Python code for security vulnerabilities"</p>
+                <p style={{ margin: '0 0 8px 0' }}>❌ <strong>No boundaries</strong> - unlimited capabilities</p>
+                <p style={{ margin: '0', color: '#4CAF50' }}>✅ <strong>Clear limits</strong> - "cannot execute code, only analyze"</p>
+              </div>
+              
+              <h3 style={{ color: '#4CAF50', margin: '20px 0 12px 0' }}>💡 Pro Tips</h3>
+              <ul style={{ marginLeft: '20px', marginBottom: '16px' }}>
+                <li><strong>Start specific</strong> - narrow focus beats broad capabilities</li>
+                <li><strong>Plan for failure</strong> - what happens when tools don't work?</li>
+                <li><strong>Validate everything</strong> - input, processing, output</li>
+                <li><strong>Think production</strong> - will this work reliably at scale?</li>
+                <li><strong>Human oversight</strong> - when should humans review decisions?</li>
+              </ul>
+              
+              <h3 style={{ color: '#4CAF50', margin: '20px 0 12px 0' }}>📚 Example of Good Agent Definition</h3>
+              <div style={{ backgroundColor: '#1e1e1e', padding: '12px', borderRadius: '4px', fontFamily: 'monospace', fontSize: '13px' }}>
+                <p style={{ margin: '0 0 8px 0', color: '#4CAF50' }}>Role:</p>
+                <p style={{ margin: '0 0 12px 0' }}>Python security code reviewer specializing in web application vulnerabilities</p>
+                
+                <p style={{ margin: '0 0 8px 0', color: '#4CAF50' }}>Capabilities:</p>
+                <p style={{ margin: '0 0 12px 0' }}>• Static analysis for SQL injection, XSS, and authentication flaws<br/>• OWASP compliance checking with remediation suggestions<br/>• Dependency vulnerability assessment</p>
+                
+                <p style={{ margin: '0 0 8px 0', color: '#4CAF50' }}>Tool Usage:</p>
+                <p style={{ margin: '0 0 12px 0' }}>• Read files completely before analysis<br/>• Grep for vulnerability patterns<br/>• Bash for security scanners when available</p>
+                
+                <p style={{ margin: '0 0 8px 0', color: '#4CAF50' }}>Limitations:</p>
+                <p style={{ margin: '0 0 12px 0' }}>• Cannot modify code, only analyze and suggest<br/>• Escalates critical findings to security team<br/>• Never executes untrusted code</p>
+                
+                <p style={{ margin: '0 0 8px 0', color: '#4CAF50' }}>Success Criteria:</p>
+                <p style={{ margin: '0' }}>• &gt;95% accuracy on known vulnerability patterns<br/>• &lt;5% false positive rate<br/>• Complete analysis within 5 minutes</p>
+              </div>
+              
+              <div style={{ 
+                backgroundColor: '#2a4d3a', 
+                padding: '12px', 
+                borderRadius: '4px', 
+                marginTop: '20px',
+                border: '1px solid #4CAF50'
+              }}>
+                <p style={{ margin: '0', fontWeight: 'bold' }}>Remember: Specialized agents that do one thing well consistently outperform generalist agents that try to do everything.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
