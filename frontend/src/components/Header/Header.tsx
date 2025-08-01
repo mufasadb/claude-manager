@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { ApiService } from '../../services/ApiService';
-import { SessionCountdown } from '../../types';
+import { SessionCountdown, SessionStats } from '../../types';
 import './Header.css';
 
 type ConnectionStatus = 'connected' | 'disconnected' | 'checking';
 
-const Header: React.FC = () => {
+interface HeaderProps {
+  onOpenSessionSidebar: () => void;
+}
+
+const Header: React.FC<HeaderProps> = ({ onOpenSessionSidebar }) => {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('checking');
   const [sessionCountdown, setSessionCountdown] = useState<SessionCountdown | null>(null);
+  const [sessionStats, setSessionStats] = useState<SessionStats | null>(null);
 
   useEffect(() => {
     const checkConnection = async () => {
@@ -28,9 +33,19 @@ const Header: React.FC = () => {
       }
     };
 
+    const fetchSessionStats = async () => {
+      try {
+        const stats = await ApiService.getSessionStats();
+        setSessionStats(stats);
+      } catch (error) {
+        setSessionStats(null);
+      }
+    };
+
     // Initial checks
     checkConnection();
     fetchCountdown();
+    fetchSessionStats();
 
     // Check connection every 5 seconds
     const connectionInterval = setInterval(checkConnection, 5000);
@@ -38,9 +53,13 @@ const Header: React.FC = () => {
     // Update countdown every second
     const countdownInterval = setInterval(fetchCountdown, 1000);
 
+    // Update session stats every 30 seconds
+    const statsInterval = setInterval(fetchSessionStats, 30000);
+
     return () => {
       clearInterval(connectionInterval);
       clearInterval(countdownInterval);
+      clearInterval(statsInterval);
     };
   }, []);
 
@@ -86,6 +105,7 @@ const Header: React.FC = () => {
     }
   };
 
+
   return (
     <div className="header">
       <div className="header-left">
@@ -107,6 +127,13 @@ const Header: React.FC = () => {
             style={{ backgroundColor: getCountdownColor() }}
           />
           <span className="countdown-text">{formatCountdown()}</span>
+          <button 
+            className="session-stats-button"
+            onClick={onOpenSessionSidebar}
+            title="View session statistics"
+          >
+            📊
+          </button>
         </div>
       </div>
     </div>

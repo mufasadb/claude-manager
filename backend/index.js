@@ -1,3 +1,4 @@
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const ClaudeManager = require('./claude-manager');
 
 // Create and initialize the manager

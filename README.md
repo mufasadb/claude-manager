@@ -7,6 +7,7 @@ A comprehensive web-based dashboard for managing Claude Code environments across
 Claude Manager is a centralized control panel that simplifies working with Claude Code across multiple projects. Instead of manually configuring each project, you get:
 
 - **Global Project Registry**: Register any project from anywhere and manage all Claude configurations from one dashboard
+- **AI-Powered Slash Commands**: Generate professional Claude Code slash commands using detailed instructions with Gemini Flash 1.5
 - **MCP Server Management**: Add, configure, and manage Model Context Protocol servers with popular templates
 - **Automated Hooks**: Set up code formatting, testing, and safety checks that run automatically
 - **Session Tracking**: Monitor your Claude Code usage against plan limits with real-time countdowns
@@ -17,15 +18,25 @@ Claude Manager is a centralized control panel that simplifies working with Claud
 
 ### Installation
 
-1. **Clone and install**:
+1. **Prerequisites**:
+   - [Bun](https://bun.sh) - Fast JavaScript runtime and package manager
+   - Node.js 20+ (for React development)
+
+2. **Clone and install**:
    ```bash
    git clone https://github.com/callmebeachy/claude-manager.git
    cd claude-manager
-   npm install
+   bun install          # Install all dependencies with Bun
    ```
 
-2. **Set up configuration**:
+3. **Set up configuration**:
    ```bash
+   # Create environment file for OpenRouter API
+   cp .env.example .env
+   
+   # Edit .env with your OpenRouter API key
+   nano .env  # Add your OPENROUTER_API_KEY
+   
    # Create config directory and copy examples
    mkdir -p ~/.claude-manager
    cp examples/*.example ~/.claude-manager/
@@ -34,11 +45,11 @@ Claude Manager is a centralized control panel that simplifies working with Claud
    cd ~/.claude-manager
    for file in *.example; do mv "$file" "${file%.example}"; done
    
-   # Edit user.env with your API keys
+   # Edit user.env with any additional API keys
    nano ~/.claude-manager/user.env
    ```
 
-3. **Install global commands** (optional but recommended):
+4. **Install global commands** (optional but recommended):
    ```bash
    ./install.sh
    source ~/.zshrc  # or ~/.bashrc
@@ -48,22 +59,32 @@ Claude Manager is a centralized control panel that simplifies working with Claud
 
 ```bash
 # Build frontend first
-npm run frontend:build
+bun run build         # Build React production bundle
 
-# Development mode (backend with hot reload)
-npm run dev
+# Development mode - SINGLE COMMAND runs both backend + frontend! 🚀
+bun run dev          # Runs both services in parallel with colored output
 
 # Production mode  
-npm start
+bun start            # Start backend server only (serves built frontend)
 ```
 
 Open **http://localhost:3455** in your browser.
 
-**For frontend development:**
+**Development Commands:**
 ```bash
-# Start React dev server (port 3456) with backend proxy
-npm run frontend:dev
-# Backend runs on port 3455, frontend dev server on 3456
+# Single command development (recommended)
+bun run dev          # Backend (port 3455) + Frontend (port 3456) in parallel
+
+# Individual services
+cd backend && bun --watch index.js    # Backend only
+cd frontend && bun run start         # Frontend only
+
+# Other tasks
+bun run build        # Build production frontend
+bun run test         # Run frontend tests  
+bun run typecheck    # TypeScript checking
+bun run clean        # Clean all dependencies
+bun run claude:register  # Register current project
 ```
 
 ## Core Features

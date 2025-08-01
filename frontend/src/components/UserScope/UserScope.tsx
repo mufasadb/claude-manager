@@ -7,6 +7,7 @@ import MCPManagement from '../MCPManagement/MCPManagement';
 import SlashCommandCreator from './SlashCommandCreator';
 import AgentCreator from './AgentCreator';
 import HookManagement from '../HookManagement/HookManagement';
+import HookEvents from '../HookEvents/HookEvents';
 import './UserScope.css';
 
 interface UserScopeProps {
@@ -67,11 +68,18 @@ const UserScope: React.FC<UserScopeProps> = ({
       </div>
 
       <div className="scope-section">
-        <div className="scope-header">🎣 Hook Events</div>
+        <div className="scope-header">🎣 Hook Management</div>
         <div className="scope-content">
           <HookManagement 
             scope="user"
           />
+        </div>
+      </div>
+
+      <div className="scope-section">
+        <div className="scope-header">📊 Live Hook Events</div>
+        <div className="scope-content">
+          <HookEvents />
         </div>
       </div>
 

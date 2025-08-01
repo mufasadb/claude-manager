@@ -1,0 +1,63 @@
+# Moon workspace configuration for Claude Manager
+schema: "https://moonrepo.dev/schemas/workspace.json"
+
+# Node.js configuration
+node:
+  version: "20.12.0"
+  packageManager: "bun"
+  bun:
+    version: "1.2.14"
+
+# Workspace projects
+projects:
+  - "backend"
+  - "frontend"
+
+# Project aliases for easier reference
+projectAliases:
+  be: "backend"
+  fe: "frontend"
+  client: "frontend"
+
+# Runner configuration
+runner:
+  cacheLifetime: "7 days"
+  inheritColorsForPipedTasks: true
+  logRunningCommand: true
+
+# Dependency management
+dependencyGraph:
+  # Frontend depends on backend for development
+  frontend:
+    - "backend"
+
+# Version control integration
+vcs:
+  manager: "git"
+  defaultBranch: "main"
+
+# Global tasks that can be run from workspace root
+tasks:
+  dev:
+    command: "moon run backend:dev frontend:dev"
+    options:
+      runInCI: false
+    
+  build:
+    command: "moon run frontend:build"
+    deps:
+      - "frontend:build"
+    
+  install:
+    command: "bun install"
+    options:
+      runInCI: false
+    
+  clean:
+    command: "bun run clean"
+    options:
+      runInCI: false
+
+# Workspace-level environment variables
+env:
+  NODE_ENV: "development"

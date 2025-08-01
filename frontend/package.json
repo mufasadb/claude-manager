@@ -1,7 +1,8 @@
 {
-  "name": "client",
+  "name": "claude-manager-frontend",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "bun@1.2.14",
   "dependencies": {
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
@@ -24,7 +25,8 @@
     "start": "PORT=3456 BROWSER=none react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "clean": "rm -rf node_modules build .bun"
   },
   "proxy": "http://localhost:3455",
   "eslintConfig": {

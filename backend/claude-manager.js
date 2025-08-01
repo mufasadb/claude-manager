@@ -66,19 +66,59 @@ class ClaudeManager {
     await this.mcpService.init();
     await this.hookRegistry.init();
     
+    // Load initial data first
+    await this.refreshAllData();
+    
     // Set up file watchers
     this.setupFileWatchers();
     
-    // Set up web server
-    this.setupWebServer();
-    
-    // Load initial data
-    await this.refreshAllData();
-    
-    // Initialize hook services after user env vars are loaded
+    // Initialize hook services after user env vars are loaded  
     await this.initializeHookServices();
     
+    // Set up web server LAST
+    this.setupWebServer();
+    
     console.log('🚀 Claude Manager started on http://localhost:3455');
+  }
+
+  async refreshAllData() {
+    try {
+      // Load user configuration
+      await this.loadUserConfig();
+      
+      // Load user environment variables
+      await this.loadUserEnvVars();
+      
+      // Update timestamp
+      this.state.lastUpdate = Date.now();
+      
+      console.log('All data refreshed successfully');
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+    }
+  }
+
+  async loadUserConfig() {
+    try {
+      const userPaths = getUserConfigPaths();
+      if (await fs.pathExists(userPaths.settings)) {
+        this.state.userConfig = await fs.readJson(userPaths.settings);
+      }
+    } catch (error) {
+      console.error('Error loading user config:', error);
+      this.state.userConfig = {};
+    }
+  }
+
+  async loadUserEnvVars() {
+    try {
+      if (await fs.pathExists(this.userEnvFile)) {
+        this.state.userEnvVars = parseEnvFile(await fs.readFile(this.userEnvFile, 'utf8'));
+      }
+    } catch (error) {
+      console.error('Error loading user env vars:', error);
+      this.state.userEnvVars = {};
+    }
   }
 
   async ensureDirectories() {
@@ -106,6 +146,69 @@ class ClaudeManager {
     for (const [projectName, project] of Object.entries(projects)) {
       await this.hookRegistry.loadProjectHooks(projectName, project.path);
     }
+
+    // Set up hook event broadcasting
+    this.setupHookEventBroadcasting();
+  }
+
+  // Hook Event Broadcasting
+  setupHookEventBroadcasting() {
+    if (!this.hookEventService) return;
+
+    // Listen for incoming hook events and broadcast them
+    this.hookEventService.on('eventReceived', (event) => {
+      this.broadcastToClients({
+        type: 'hookEventReceived',
+        event: {
+          id: event.id,
+          eventType: event.eventType,
+          toolName: event.toolName,
+          projectPath: event.projectPath,
+          timestamp: event.timestamp,
+          receivedAt: event.receivedAt
+        }
+      });
+    });
+
+    // Listen for processed events and broadcast results
+    this.hookEventService.on('eventProcessed', (result) => {
+      this.broadcastToClients({
+        type: 'hookEventProcessed',
+        result: {
+          eventId: result.event.id,
+          eventType: result.event.eventType,
+          hooksExecuted: result.hooksExecuted,
+          processingTime: result.processingTime,
+          timestamp: Date.now()
+        }
+      });
+    });
+
+    // Listen for hook execution results
+    this.hookEventService.on('hookExecuted', (execution) => {
+      this.broadcastToClients({
+        type: 'hookExecuted',
+        execution: {
+          eventId: execution.event.id,
+          hookName: execution.hook.name,
+          success: execution.result.success,
+          timestamp: Date.now()
+        }
+      });
+    });
+
+    // Listen for hook errors
+    this.hookEventService.on('hookError', (error) => {
+      this.broadcastToClients({
+        type: 'hookError',
+        error: {
+          eventId: error.event?.id || 'unknown',
+          hookName: error.hook?.name || 'unknown',
+          message: error.error,
+          timestamp: Date.now()
+        }
+      });
+    });
   }
 
   // File Watching
@@ -304,30 +407,41 @@ class ClaudeManager {
   setupWebServer() {
     this.app.use(express.json({ limit: '50mb' }));
     
-    // Serve React app build files in production, fallback to old HTML in development
-    const reactBuildPath = path.join(__dirname, '..', 'frontend', 'build');
-    const publicPath = path.join(__dirname, 'public');
-    
-    if (fs.existsSync(reactBuildPath)) {
-      this.app.use(express.static(reactBuildPath));
-    } else {
-      this.app.use(express.static(publicPath));
-    }
+    // Backend serves ONLY REST API - no static files
+    // Frontend dev server runs on port 3456 for development
     
     // API Routes
     this.setupAPIRoutes();
     
     // Create HTTP server
     const http = require('http');
-    const WebSocket = require('ws');
     this.server = http.createServer(this.app);
     
     // Set up WebSocket server
-    this.wss = new WebSocket.Server({ server: this.server });
-    this.setupWebSocket();
+    try {
+      const WebSocket = require('ws');
+      this.wss = new WebSocket.Server({ server: this.server });
+      this.setupWebSocket();
+      console.log('WebSocket server initialized');
+    } catch (error) {
+      console.error('WebSocket setup failed:', error);
+    }
     
-    this.server.listen(3455, () => {
-      console.log('Server listening on port 3455');
+    const port = 3455;
+    this.server.on('error', (error) => {
+      console.error('Server error:', error);
+      // Try to kill any existing process on this port
+      require('child_process').exec(`lsof -ti:${port} | xargs kill -9`, (err) => {
+        if (!err) console.log('Killed existing process on port', port);
+      });
+    });
+    
+    this.server.listen(port, (error) => {
+      if (error) {
+        console.error('Failed to start server:', error);
+      } else {
+        console.log(`✅ Server successfully listening on port ${port}`);
+      }
     });
   }
 
@@ -968,11 +1082,11 @@ class ClaudeManager {
     // Slash Command Management
     this.app.post('/api/create-slash-command', async (req, res) => {
       try {
-        const { commandName, description, scope, category, projectName } = req.body;
+        const { commandName, instructions, scope, category, projectName } = req.body;
         
         const result = await this.commandService.createSlashCommand(
           commandName, 
-          description, 
+          instructions, 
           scope, 
           category, 
           projectName
@@ -984,12 +1098,15 @@ class ClaudeManager {
             type: 'slashCommandCreated', 
             command: {
               name: commandName,
-              description,
+              description: result.description,
+              instructions,
               scope,
               category,
               projectName,
               path: result.commandPath,
-              relativePath: result.relativePath
+              relativePath: result.relativePath,
+              allowedTools: result.allowedTools,
+              suggestedCategory: result.suggestedCategory
             }
           });
         }
@@ -1278,6 +1395,22 @@ class ClaudeManager {
       }
     });
 
+    // Get recent hook events
+    this.app.get('/api/hooks/events', (req, res) => {
+      try {
+        const limit = parseInt(req.query.limit) || 50;
+        const events = this.hookEventService ? this.hookEventService.getRecentEvents(limit) : [];
+        
+        res.json({
+          events: events,
+          total: events.length,
+          limit: limit
+        });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
     // Get hook templates
     this.app.get('/api/hooks/templates', (req, res) => {
       try {
@@ -1330,17 +1463,8 @@ class ClaudeManager {
       }
     });
 
-    // Catch-all handler for React Router - must be last
-    this.app.get('*', (req, res) => {
-      const reactBuildPath = path.join(__dirname, '..', 'frontend', 'build');
-      const publicPath = path.join(__dirname, 'public');
-      
-      if (fs.existsSync(reactBuildPath)) {
-        res.sendFile(path.join(reactBuildPath, 'index.html'));
-      } else {
-        res.sendFile(path.join(publicPath, 'index.html'));
-      }
-    });
+    // No catch-all handler - backend serves ONLY API endpoints
+    // All other requests should return 404
   }
 
   // State Management

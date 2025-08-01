@@ -1,33 +1,50 @@
 # Claude Manager - Technical Architecture
 
-Node.js web application providing a centralized dashboard for monitoring and managing Claude Code configurations, MCP servers, hooks, and session tracking across multiple projects. Built with Express backend, React TypeScript frontend, and real-time WebSocket communication.
+Node.js application providing a centralized dashboard for monitoring and managing Claude Code configurations, MCP servers, hooks, and session tracking across multiple projects. Built with Express backend, React TypeScript frontend, real-time WebSocket communication, and powered by Bun runtime for fast development.
 
 ## Quick Developer Onboarding
 
-This is a Node.js application with an Express backend and React TypeScript frontend. The backend uses WebSocket for real-time updates and file system monitoring via chokidar. The application follows a modular service-oriented architecture.
+This is a dual-service application with Bun as the package manager and runtime. The backend uses WebSocket for real-time updates and file system monitoring via chokidar. The application follows a modular service-oriented architecture optimized for performance.
+
+**Prerequisites:**
+- [Bun](https://bun.sh) - Fast JavaScript runtime and package manager  
+- Node.js 20+ (for React development)
 
 **Start developing:**
 ```bash
-npm install
-npm run frontend:install  # Install React dependencies
-npm run frontend:build    # Build React app for production
-npm run dev               # Start backend server with nodemon
+bun install              # Install all dependencies
+bun run build           # Build React app for production  
+bun run dev             # SINGLE COMMAND: Runs both backend + frontend in parallel! 🚀
 ```
 
-**For React development:**
+**Individual service commands:**
 ```bash
-npm run frontend:dev     # Start React dev server (port 3456)
-# Backend server runs on port 3455
-# Frontend proxies API requests to backend
+cd backend && bun --watch index.js    # Backend API only (port 3455)
+cd frontend && bun run start         # Frontend dev server (port 3456)
 ```
 
-**Web dashboard:** 
-- Production: http://localhost:3455 (serves built React app)
-- Development: http://localhost:3456 (React dev server with hot reload)
+**🚨 IMPORTANT: Development URLs**
+- **Frontend (with hot reload)**: http://localhost:3456 ← USE THIS FOR DEVELOPMENT
+- **Backend API only**: http://localhost:3455/api/* ← APIs only, NO WEB UI
+
+**Backend port 3455 serves ONLY REST API endpoints, NO static files or web UI.**
+**Frontend port 3456 serves the React app with hot reload and proxies API calls to 3455.**
+
+**Development Workflow:**
+```bash
+# Option 1: Start both services together (recommended)
+bun run dev                          # Starts backend + frontend in parallel
+
+# Option 2: Start services individually 
+cd backend && bun --watch index.js   # Terminal 1: Backend API (3455)
+cd frontend && bun run start        # Terminal 2: Frontend dev (3456)
+
+# Then always use: http://localhost:3456 for development
+```
 
 **Register projects for testing:**
 ```bash
-npm run claude:register  # Register current directory
+bun run claude:register  # Register current directory
 ./install.sh && source ~/.zshrc  # Install global cm-reg/cm-unreg commands
 ```
 
@@ -560,26 +577,37 @@ curl -X POST localhost:3455/api/toggle-session-tracking \
 # Clone and install
 git clone <repository-url>
 cd claude-manager
-npm install
-npm run frontend:install
+bun install              # Install all dependencies with Bun
 
 # Build and start
-npm run frontend:build
-npm run dev
+bun run build           # Build production frontend
+bun run dev             # Start backend with Bun --watch
 
 # Install global commands (optional)
 ./install.sh
 source ~/.zshrc
 
 # Register current project for testing
-npm run claude:register
+bun run claude:register
 ```
 
 **Development Commands:**
 ```bash
-npm run dev              # Start backend with nodemon
-npm run frontend:dev     # Start React dev server
-npm run frontend:build   # Build production frontend
-npm start               # Start production server
+# Single command development (recommended)
+bun run dev              # Both backend + frontend in parallel with colored output
+
+# Individual services
+cd backend && bun --watch index.js    # Backend only
+cd frontend && bun run start         # Frontend only
+
+# Production and utilities
+bun run build           # Build production frontend
+bun start               # Start production server
+bun run test            # Run frontend tests
+bun run typecheck       # TypeScript checking
+bun run clean           # Clean all dependencies
+bun run claude:register # Register current project
+
+# Monitoring
 tail -f server.log      # Monitor server logs
 ```

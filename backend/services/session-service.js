@@ -232,22 +232,55 @@ class SessionService {
   // Session Statistics
   getSessionStats() {
     const now = new Date();
+    
+    // Calculate billing period start
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    let currentPeriodStart;
+    if (now.getDate() >= this.state.billingDate) {
+      currentPeriodStart = new Date(currentYear, currentMonth, this.state.billingDate);
+    } else {
+      currentPeriodStart = new Date(currentYear, currentMonth - 1, this.state.billingDate);
+    }
+
+    // Format session history for frontend with proper duration calculation
+    const formattedHistory = (this.state.sessionHistory || []).map(session => {
+      try {
+        const startTime = session.start ? new Date(session.start) : new Date();
+        const endTime = session.end ? new Date(session.end) : new Date();
+        const duration = Math.max(0, Math.round((endTime.getTime() - startTime.getTime()) / (60 * 60 * 1000) * 10) / 10);
+        
+        return {
+          start: startTime.toISOString(),
+          end: endTime.toISOString(),
+          duration: duration
+        };
+      } catch (error) {
+        console.error('Error formatting session history entry:', error, session);
+        return {
+          start: new Date().toISOString(),
+          end: new Date().toISOString(),
+          duration: 0
+        };
+      }
+    }).filter(session => session !== null);
+
     const stats = {
       enabled: this.state.enabled,
-      currentSessionStart: this.state.currentSessionStart,
+      currentPeriodStart: currentPeriodStart.toISOString(),
       billingDate: this.state.billingDate,
       monthlySessions: this.state.monthlySessions,
-      sessionHistory: this.state.sessionHistory || [],
+      sessionHistory: formattedHistory,
       timeRemaining: null,
       planLimits: {
         pro: 45,
-        'max-5x': 225,
-        'max-20x': 900
+        maxFive: 225,
+        maxTwenty: 900
       },
       estimatedCosts: {
         pro: { monthly: 20, perSession: 20 / 45 },
-        'max-5x': { monthly: 100, perSession: 100 / 225 },
-        'max-20x': { monthly: 400, perSession: 400 / 900 }
+        maxFive: { monthly: 100, perSession: 100 / 225 },
+        maxTwenty: { monthly: 400, perSession: 400 / 900 }
       }
     };
 
@@ -365,6 +398,10 @@ class SessionService {
     if (!await fs.pathExists(this.claudeProjectsPath)) {
       return;
     }
+
+    // Optimize: Skip watcher setup to avoid performance issues with large directories
+    console.log('Session watcher disabled to prevent blocking on large ~/.claude/projects directory');
+    return;
 
     // Clean up existing watcher
     if (this.sessionWatcher) {

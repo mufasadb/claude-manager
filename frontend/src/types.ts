@@ -68,6 +68,22 @@ export interface SessionCountdown {
   };
 }
 
+export interface SessionStats {
+  enabled: boolean;
+  currentPeriodStart: string;
+  monthlySessions: number;
+  sessionHistory: Array<{
+    start: string;
+    end: string;
+    duration: number;
+  }>;
+  planLimits: {
+    pro: number;
+    maxFive: number;
+    maxTwenty: number;
+  };
+}
+
 export interface SlashCommand {
   name: string;
   category: string | null;
@@ -78,7 +94,7 @@ export interface SlashCommand {
 
 export interface SlashCommandFormData {
   commandName: string;
-  description: string;
+  instructions: string;
   scope: 'user' | 'project';
   category: string;
   projectName?: string;
@@ -90,6 +106,9 @@ export interface SlashCommandCreationResult {
   relativePath?: string;
   output?: string;
   error?: string;
+  description?: string;
+  allowedTools?: string[];
+  suggestedCategory?: string;
 }
 
 export interface Agent {

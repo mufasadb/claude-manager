@@ -109,6 +109,11 @@ const COMMON_HOOKS = {
   ],
   SubagentStop: [
     {
+      name: 'TTS Subagent Complete',
+      pattern: '*',
+      command: 'node /Users/danielbeach/Code/claude-manager/experiments/tts/scripts/subagent-tts-hook.js'
+    },
+    {
       name: 'Subagent Complete Notification',
       pattern: '*',
       command: 'osascript -e "display notification \\"Subagent task completed!\\" with title \\"Claude Code\\" sound name \\"Tink\\""'

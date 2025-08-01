@@ -1,4 +1,4 @@
-import { AppState, Hook, MCPTemplate, MCPState, MCP, SessionCountdown, SlashCommandFormData, SlashCommandCreationResult, SlashCommand, AgentFormData, AgentCreationResult, Agent, AgentTemplate } from '../types';
+import { AppState, Hook, MCPTemplate, MCPState, MCP, SessionCountdown, SessionStats, SlashCommandFormData, SlashCommandCreationResult, SlashCommand, AgentFormData, AgentCreationResult, Agent, AgentTemplate } from '../types';
 
 const API_BASE = '';
 
@@ -323,6 +323,14 @@ export class ApiService {
 
   static async getSessionCountdown(): Promise<SessionCountdown> {
     const response = await fetch(`${API_BASE}/api/countdown`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  static async getSessionStats(): Promise<SessionStats> {
+    const response = await fetch(`${API_BASE}/api/session-stats`);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }

@@ -2,10 +2,12 @@ const fs = require('fs-extra');
 const path = require('path');
 const { spawn } = require('child_process');
 const { validatePath } = require('../utils/path-utils');
+const OpenRouterService = require('./openrouter-service');
 
 class CommandService {
     constructor() {
         this.validNamePattern = /^[a-zA-Z0-9_-]+$/;
+        this.openRouterService = new OpenRouterService();
     }
 
     validateCommandName(name) {
@@ -47,7 +49,7 @@ class CommandService {
         }
     }
 
-    async createSlashCommand(commandName, description, scope, category = null, projectName = null) {
+    async createSlashCommand(commandName, instructions, scope, category = null, projectName = null) {
         try {
             // Validate inputs
             const nameValidation = this.validateCommandName(commandName);
@@ -55,8 +57,8 @@ class CommandService {
                 throw new Error(nameValidation.error);
             }
 
-            if (!description || description.trim().length < 10) {
-                throw new Error('Description must be at least 10 characters long');
+            if (!instructions || instructions.trim().length < 10) {
+                throw new Error('Instructions must be at least 10 characters long');
             }
 
             if (!['user', 'project'].includes(scope)) {
@@ -87,18 +89,29 @@ class CommandService {
                 throw new Error('Invalid command file path');
             }
 
-            // For demo purposes, generate the command content directly
-            // In production, you would use: await this.executeClaudeCommand(prompt, path.dirname(baseCommandsDir));
-            const commandContent = this.generateSlashCommandContent(commandName, description, category);
-            
+            // Generate command content using OpenRouter
+            console.log(`Generating slash command with OpenRouter: ${commandName}`);
+            const generationResult = await this.openRouterService.generateSlashCommand(
+                commandName, 
+                instructions, 
+                category
+            );
+
+            if (!generationResult.success) {
+                throw new Error(generationResult.error || 'Failed to generate command content');
+            }
+
             // Write the command file
-            await fs.writeFile(commandFile, commandContent, 'utf8');
+            await fs.writeFile(commandFile, generationResult.content, 'utf8');
 
             return {
                 success: true,
                 commandPath: commandFile,
                 relativePath: category ? `${category}/${commandName}.md` : `${commandName}.md`,
-                output: 'Slash command created successfully'
+                output: 'Slash command created successfully with AI generation',
+                description: generationResult.description,
+                allowedTools: generationResult.allowedTools,
+                suggestedCategory: generationResult.suggestedCategory
             };
 
         } catch (error) {

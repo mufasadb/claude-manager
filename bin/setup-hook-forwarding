@@ -1,0 +1,127 @@
+#!/bin/bash
+
+# Claude Manager Hook Setup Script
+# Automatically configures Claude Code hooks to forward events to Claude Manager
+
+set -e
+
+# Configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CLAUDE_MANAGER_DIR="$(dirname "$SCRIPT_DIR")"
+FORWARDER_SCRIPT="$CLAUDE_MANAGER_DIR/examples/claude-hook-forwarder-advanced.sh"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo "🔗 Claude Manager Hook Setup"
+echo "============================"
+
+# Check if we're in a project directory
+if [ ! -d ".claude" ]; then
+    echo -e "${RED}Error: No .claude directory found. Please run this from a Claude Code project directory.${NC}"
+    exit 1
+fi
+
+# Check if forwarder script exists
+if [ ! -f "$FORWARDER_SCRIPT" ]; then
+    echo -e "${RED}Error: Hook forwarder script not found at $FORWARDER_SCRIPT${NC}"
+    exit 1
+fi
+
+# Detect current project
+PROJECT_NAME=$(basename "$(pwd)")
+echo -e "📁 Project: ${GREEN}$PROJECT_NAME${NC}"
+echo -e "🏠 Directory: $(pwd)"
+echo -e "📜 Forwarder: $FORWARDER_SCRIPT"
+echo
+
+# Check if Claude Manager is running
+echo "🔍 Checking Claude Manager status..."
+if curl -s "http://localhost:3455/api/status" > /dev/null 2>&1; then
+    echo -e "${GREEN}✅ Claude Manager is running${NC}"
+else
+    echo -e "${YELLOW}⚠️  Claude Manager doesn't appear to be running on localhost:3455${NC}"
+    echo "   You may need to start it first: npm run dev"
+fi
+echo
+
+# Read existing settings if they exist
+SETTINGS_FILE=".claude/settings.json"
+if [ -f "$SETTINGS_FILE" ]; then
+    echo "📖 Found existing Claude settings"
+    EXISTING_SETTINGS=$(cat "$SETTINGS_FILE")
+else
+    echo "📝 Creating new Claude settings file"
+    EXISTING_SETTINGS="{}"
+fi
+
+# Create hook configuration
+cat > /tmp/hook_config.json << EOF
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CLAUDE_HOOK_EVENT=PreToolUse '$FORWARDER_SCRIPT'"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CLAUDE_HOOK_EVENT=PostToolUse '$FORWARDER_SCRIPT'"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CLAUDE_HOOK_EVENT=UserPromptSubmit '$FORWARDER_SCRIPT'"
+          }
+        ]
+      }
+    ]
+  }
+}
+EOF
+
+# Merge with existing settings
+if command -v jq >/dev/null 2>&1; then
+    echo "🔧 Merging hook configuration with existing settings..."
+    MERGED_SETTINGS=$(echo "$EXISTING_SETTINGS" | jq -s '.[0] * .[1]' - /tmp/hook_config.json)
+    echo "$MERGED_SETTINGS" > "$SETTINGS_FILE"
+    echo -e "${GREEN}✅ Hook configuration added successfully${NC}"
+else
+    echo -e "${YELLOW}⚠️  jq not found. Creating basic configuration...${NC}"
+    cp /tmp/hook_config.json "$SETTINGS_FILE"
+    echo -e "${GREEN}✅ Basic hook configuration created${NC}"
+    echo -e "${YELLOW}   Note: This overwrote any existing settings. You may need to merge manually.${NC}"
+fi
+
+# Clean up
+rm /tmp/hook_config.json
+
+echo
+echo "🎉 Hook forwarding setup complete!"
+echo
+echo "Next steps:"
+echo "1. Restart Claude Code if it's currently running"
+echo "2. Use Claude Code in this project - hook events will be forwarded to Claude Manager"
+echo "3. Check the Claude Manager dashboard at http://localhost:3455 to see hook events"
+echo
+echo "To enable debug logging, set: export CLAUDE_HOOK_DEBUG=true"
+echo "To change Claude Manager URL, set: export CLAUDE_MANAGER_URL=http://your-url:port"

@@ -9,7 +9,7 @@ interface SlashCommandCreatorProps {
 const SlashCommandCreator: React.FC<SlashCommandCreatorProps> = ({ projects }) => {
   const [formData, setFormData] = useState<SlashCommandFormData>({
     commandName: '',
-    description: '',
+    instructions: '',
     scope: 'user',
     category: '',
     projectName: ''
@@ -66,11 +66,11 @@ const SlashCommandCreator: React.FC<SlashCommandCreatorProps> = ({ projects }) =
       errors.commandName = `Command "${commandPath}" already exists`;
     }
 
-    // Description validation
-    if (!formData.description.trim()) {
-      errors.description = 'Description is required';
-    } else if (formData.description.trim().length < 10) {
-      errors.description = 'Description must be at least 10 characters long';
+    // Instructions validation
+    if (!formData.instructions.trim()) {
+      errors.instructions = 'Instructions are required';
+    } else if (formData.instructions.trim().length < 10) {
+      errors.instructions = 'Instructions must be at least 10 characters long';
     }
 
     // Project validation for project scope
@@ -107,7 +107,7 @@ const SlashCommandCreator: React.FC<SlashCommandCreatorProps> = ({ projects }) =
         // Reset form
         setFormData({
           commandName: '',
-          description: '',
+          instructions: '',
           scope: formData.scope, // Keep scope selection
           category: '',
           projectName: formData.projectName // Keep project selection
@@ -339,33 +339,33 @@ const SlashCommandCreator: React.FC<SlashCommandCreatorProps> = ({ projects }) =
             </div>
           </div>
 
-          {/* Description */}
+          {/* Instructions */}
           <div>
             <label style={{ color: '#ffffff', display: 'block', marginBottom: '8px' }}>
-              Description *
+              What should this command do? *
             </label>
             <textarea
-              value={formData.description}
-              onChange={(e) => handleInputChange('description', e.target.value)}
-              placeholder="Deploy the current feature branch to staging environment with proper testing and rollback capabilities"
-              rows={4}
+              value={formData.instructions}
+              onChange={(e) => handleInputChange('instructions', e.target.value)}
+              placeholder="Create a deployment command that checks git status, runs tests, builds for production, deploys to staging with rollback capability, and verifies success with notifications. Include error handling and logging at each step."
+              rows={6}
               style={{
                 width: '100%',
                 padding: '10px',
                 backgroundColor: '#1e1e1e',
                 color: '#ffffff',
-                border: validationErrors.description ? '2px solid #f44336' : '1px solid #666',
+                border: validationErrors.instructions ? '2px solid #f44336' : '1px solid #666',
                 borderRadius: '4px',
                 resize: 'vertical'
               }}
             />
-            {validationErrors.description && (
+            {validationErrors.instructions && (
               <div style={{ color: '#f44336', fontSize: '14px', marginTop: '4px' }}>
-                {validationErrors.description}
+                {validationErrors.instructions}
               </div>
             )}
             <div style={{ color: '#888', fontSize: '14px', marginTop: '4px' }}>
-              Describe what this command should do - this helps Claude generate better prompts
+              Describe what you want this command to accomplish. The AI will create a professional slash command with proper structure, tools, and examples based on your description.
             </div>
           </div>
 
@@ -394,11 +394,33 @@ const SlashCommandCreator: React.FC<SlashCommandCreatorProps> = ({ projects }) =
               borderRadius: '4px',
               cursor: isSubmitting ? 'not-allowed' : 'pointer',
               fontSize: '16px',
-              fontWeight: 'bold'
+              fontWeight: 'bold',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px'
             }}
           >
-            {isSubmitting ? 'Creating Command...' : 'Create Slash Command'}
+            {isSubmitting && (
+              <div style={{
+                width: '16px',
+                height: '16px',
+                border: '2px solid #ffffff',
+                borderTop: '2px solid transparent',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite'
+              }} />
+            )}
+{isSubmitting ? 'AI is creating your command...' : 'Generate Slash Command'}
           </button>
+
+          {/* Add CSS for spinner animation */}
+          <style>{`
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}</style>
         </div>
       </form>
     </div>

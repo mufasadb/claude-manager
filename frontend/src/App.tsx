@@ -4,6 +4,7 @@ import Header from './components/Header/Header';
 import ScopeSelector from './components/ScopeSelector/ScopeSelector';
 import UserScope from './components/UserScope/UserScope';
 import ProjectScope from './components/ProjectScope/ProjectScope';
+import SessionSidebar from './components/SessionSidebar/SessionSidebar';
 import { AppState } from './types';
 import { ApiService } from './services/ApiService';
 
@@ -22,6 +23,7 @@ const App: React.FC = () => {
 
   const [selectedScope, setSelectedScope] = useState<'user' | 'project'>('user');
   const [selectedProject, setSelectedProject] = useState<string>('');
+  const [isSessionSidebarOpen, setIsSessionSidebarOpen] = useState(false);
 
   useEffect(() => {
     // Initial data fetch
@@ -39,7 +41,7 @@ const App: React.FC = () => {
 
   return (
     <div className="App">
-      <Header />
+      <Header onOpenSessionSidebar={() => setIsSessionSidebarOpen(true)} />
       
       <div className="container">
         <ScopeSelector
@@ -63,6 +65,11 @@ const App: React.FC = () => {
           />
         )}
       </div>
+
+      <SessionSidebar 
+        isOpen={isSessionSidebarOpen}
+        onClose={() => setIsSessionSidebarOpen(false)}
+      />
     </div>
   );
 };
