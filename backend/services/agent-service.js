@@ -2,10 +2,12 @@ const fs = require('fs-extra');
 const path = require('path');
 const { spawn } = require('child_process');
 const { validatePath } = require('../utils/path-utils');
+const OpenRouterService = require('./openrouter-service');
 
 class AgentService {
     constructor() {
         this.validNamePattern = /^[a-zA-Z0-9_-]+$/;
+        this.openRouterService = new OpenRouterService();
         this.asciiPresets = [
             { face: '( ͡° ͜ʖ ͡°)', name: 'Mischievous', description: 'Playful problem solver' },
             { face: '¯\\_(ツ)_/¯', name: 'Casual', description: 'Relaxed and easy-going' },
@@ -126,8 +128,31 @@ class AgentService {
                 throw new Error('Invalid agent file path');
             }
 
-            // Generate agent content using Claude Code
-            const agentContent = await this.generateAgentContent(agentName, description, textFace, textColor, tools);
+            // Get available tools for the scope
+            const availableTools = this.getAvailableTools();
+            
+            // Generate agent using OpenRouter
+            const generationResult = await this.openRouterService.generateAgent(
+                agentName, 
+                description, 
+                availableTools, 
+                scope
+            );
+
+            if (!generationResult.success) {
+                throw new Error(generationResult.error || 'Failed to generate agent content');
+            }
+
+            // Create the agent content with the generated system message
+            const agentContent = this.formatAgentFile(
+                agentName,
+                description,
+                textFace || generationResult.suggestedTextFace,
+                textColor || generationResult.suggestedColor,
+                tools,
+                generationResult.systemMessage,
+                generationResult
+            );
             
             // Write the agent file
             await fs.writeFile(agentFile, agentContent, 'utf8');
@@ -136,7 +161,13 @@ class AgentService {
                 success: true,
                 agentPath: agentFile,
                 relativePath: `${agentName}.md`,
-                output: 'Agent created successfully'
+                output: 'Agent created successfully with AI generation',
+                systemMessage: generationResult.systemMessage,
+                agentSummary: generationResult.agentSummary,
+                complexity: generationResult.complexity,
+                domain: generationResult.domain,
+                riskLevel: generationResult.riskLevel,
+                recommendedTools: generationResult.recommendedTools
             };
 
         } catch (error) {
@@ -148,18 +179,19 @@ class AgentService {
         }
     }
 
-    async generateAgentContent(agentName, description, textFace, textColor, tools) {
-        // For now, generate content directly
-        // In production, you could call Claude Code to generate more sophisticated agent prompts
-        
-        const title = agentName
-            .split('-')
-            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-            .join(' ');
-
-        const personalityNote = this.asciiPresets.find(preset => preset.face === textFace)?.description || 'helpful assistant';
-        
-        const toolsList = tools.join(', ');
+    formatAgentFile(agentName, description, textFace, textColor, tools, systemMessage, generationResult) {
+        const metadata = {
+            name: agentName,
+            description: description,
+            tools: tools,
+            textFace: textFace,
+            textColor: textColor,
+            complexity: generationResult.complexity || 'moderate',
+            domain: generationResult.domain || 'general',
+            riskLevel: generationResult.riskLevel || 'medium',
+            generatedAt: new Date().toISOString(),
+            agentSummary: generationResult.agentSummary
+        };
 
         return `---
 name: ${agentName}
@@ -167,33 +199,25 @@ description: ${description}
 tools: [${tools.map(tool => `"${tool}"`).join(', ')}]
 textFace: "${textFace}"
 textColor: "${textColor}"
+complexity: "${metadata.complexity}"
+domain: "${metadata.domain}"
+riskLevel: "${metadata.riskLevel}"
+generatedAt: "${metadata.generatedAt}"
+agentSummary: "${metadata.agentSummary}"
 ---
 
-You are ${textFace} ${title}, a specialized ${personalityNote} for Claude Code.
+${systemMessage}
 
-## Your Role
-${description}
+## Agent Metadata
+- **Face**: ${textFace}
+- **Color**: ${textColor}
+- **Complexity**: ${metadata.complexity}
+- **Domain**: ${metadata.domain}
+- **Risk Level**: ${metadata.riskLevel}
+- **Generated**: ${metadata.generatedAt}
 
-## Your Personality
-- Express yourself with the text face ${textFace} when appropriate
-- Maintain a ${personalityNote} demeanor
-- Be helpful, focused, and efficient
-- Stay in character while being professional
-
-## Your Capabilities
-You have access to these tools: ${toolsList}
-
-## Guidelines
-1. Always greet the user with your text face when starting a conversation
-2. Focus on your specialized area while being helpful
-3. Provide clear, actionable guidance
-4. Use your personality to make interactions engaging
-5. Be concise but thorough in your responses
-
-## Example Introduction
-${textFace} Hello! I'm ${title}, your ${personalityNote}. I'm here to help with: ${description}
-
-How can I assist you today?
+## Summary
+${metadata.agentSummary}
 `;
     }
 

@@ -110,6 +110,14 @@ class MCPService {
         transport: 'stdio',
         envVars: [],
         args: []
+      },
+      'meta-agent': {
+        name: 'Meta-Agent',
+        description: 'Generate effective agent system messages based on proven patterns from Anthropic and community best practices',
+        command: 'node',
+        transport: 'stdio',
+        envVars: [],
+        args: [path.join(__dirname, 'meta-agent-mcp-server.js')]
       }
     };
   }

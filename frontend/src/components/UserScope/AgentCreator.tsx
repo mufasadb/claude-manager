@@ -17,6 +17,10 @@ const AgentCreator: React.FC<AgentCreatorProps> = ({ projects }) => {
     tools: []
   });
 
+  const [useFaceEmoji, setUseFaceEmoji] = useState(false);
+  const [toolSearchTerm, setToolSearchTerm] = useState('');
+  const [selectedToolCategories, setSelectedToolCategories] = useState<string[]>(['core']);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<{
     type: 'success' | 'error' | null;
@@ -29,6 +33,45 @@ const AgentCreator: React.FC<AgentCreatorProps> = ({ projects }) => {
   const [availableTools, setAvailableTools] = useState<string[]>([]);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [showHelpModal, setShowHelpModal] = useState(false);
+
+  // Tool categorization helper
+  const categorizeTools = (tools: string[]) => {
+    const categories = {
+      core: ['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep'],
+      productivity: ['Task', 'TodoWrite', 'WebSearch', 'WebFetch'],
+      context7: tools.filter(tool => tool.startsWith('mcp__context7')),
+      playwright: tools.filter(tool => tool.startsWith('mcp__playwright')),
+      notion: tools.filter(tool => tool.startsWith('mcp__notion')),
+      figma: tools.filter(tool => tool.startsWith('mcp__figma')),
+      other: tools.filter(tool => 
+        !['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'Task', 'TodoWrite', 'WebSearch', 'WebFetch'].includes(tool) &&
+        !tool.startsWith('mcp__context7') &&
+        !tool.startsWith('mcp__playwright') &&
+        !tool.startsWith('mcp__notion') &&
+        !tool.startsWith('mcp__figma')
+      )
+    };
+    return categories;
+  };
+
+  const getFilteredTools = () => {
+    const categories = categorizeTools(availableTools);
+    let filteredTools: string[] = [];
+    
+    selectedToolCategories.forEach(category => {
+      if (categories[category as keyof typeof categories]) {
+        filteredTools = [...filteredTools, ...categories[category as keyof typeof categories]];
+      }
+    });
+
+    if (toolSearchTerm) {
+      filteredTools = filteredTools.filter(tool => 
+        tool.toLowerCase().includes(toolSearchTerm.toLowerCase())
+      );
+    }
+
+    return Array.from(new Set(filteredTools)); // Remove duplicates
+  };
 
   useEffect(() => {
     loadTemplates();
@@ -387,77 +430,95 @@ const AgentCreator: React.FC<AgentCreatorProps> = ({ projects }) => {
             </div>
           </div>
 
-          {/* ASCII Face Selection */}
+          {/* Face/Emoji Toggle */}
           <div>
-            <label style={{ color: '#ffffff', display: 'block', marginBottom: '8px' }}>
-              Text Face *
-            </label>
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
-              gap: '8px',
-              maxHeight: '200px',
-              overflowY: 'auto',
-              padding: '10px',
-              backgroundColor: '#1e1e1e',
-              border: '1px solid #666',
-              borderRadius: '4px'
-            }}>
-              {templates.asciiPresets.map((preset, index) => (
-                <label key={index} style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '8px',
-                  color: '#ccc',
-                  cursor: 'pointer',
-                  padding: '4px',
-                  borderRadius: '3px',
-                  backgroundColor: formData.textFace === preset.face ? '#333' : 'transparent'
-                }}>
-                  <input
-                    type="radio"
-                    value={preset.face}
-                    checked={formData.textFace === preset.face}
-                    onChange={(e) => handleInputChange('textFace', e.target.value)}
-                  />
-                  <span style={{ fontFamily: 'monospace', fontSize: '16px' }}>{preset.face}</span>
-                  <span style={{ fontSize: '12px' }}>{preset.name}</span>
-                </label>
-              ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              <input
+                type="checkbox"
+                checked={useFaceEmoji}
+                onChange={(e) => setUseFaceEmoji(e.target.checked)}
+                style={{ marginRight: '8px' }}
+              />
+              <label style={{ color: '#ffffff', margin: '0' }}>
+                Use Custom Face & Color (optional)
+              </label>
             </div>
-          </div>
-
-          {/* Color Selection */}
-          <div>
-            <label style={{ color: '#ffffff', display: 'block', marginBottom: '8px' }}>
-              Text Color *
-            </label>
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              {templates.colorPresets.map((color, index) => (
-                <label key={index} style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '6px',
-                  color: '#ccc',
-                  cursor: 'pointer'
-                }}>
-                  <input
-                    type="radio"
-                    value={color.hex}
-                    checked={formData.textColor === color.hex}
-                    onChange={(e) => handleInputChange('textColor', e.target.value)}
-                  />
+            {useFaceEmoji && (
+              <>
+                {/* ASCII Face Selection */}
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ color: '#ffffff', display: 'block', marginBottom: '8px' }}>
+                    Text Face
+                  </label>
                   <div style={{ 
-                    width: '20px', 
-                    height: '20px', 
-                    backgroundColor: color.hex,
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+                    gap: '8px',
+                    maxHeight: '150px',
+                    overflowY: 'auto',
+                    padding: '10px',
+                    backgroundColor: '#1e1e1e',
                     border: '1px solid #666',
-                    borderRadius: '3px'
-                  }} />
-                  <span style={{ fontSize: '14px' }}>{color.name}</span>
-                </label>
-              ))}
-            </div>
+                    borderRadius: '4px'
+                  }}>
+                    {templates.asciiPresets.map((preset, index) => (
+                      <label key={index} style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '8px',
+                        color: '#ccc',
+                        cursor: 'pointer',
+                        padding: '4px',
+                        borderRadius: '3px',
+                        backgroundColor: formData.textFace === preset.face ? '#333' : 'transparent'
+                      }}>
+                        <input
+                          type="radio"
+                          value={preset.face}
+                          checked={formData.textFace === preset.face}
+                          onChange={(e) => handleInputChange('textFace', e.target.value)}
+                        />
+                        <span style={{ fontFamily: 'monospace', fontSize: '16px' }}>{preset.face}</span>
+                        <span style={{ fontSize: '12px' }}>{preset.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Color Selection */}
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ color: '#ffffff', display: 'block', marginBottom: '8px' }}>
+                    Text Color
+                  </label>
+                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                    {templates.colorPresets.map((color, index) => (
+                      <label key={index} style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '6px',
+                        color: '#ccc',
+                        cursor: 'pointer'
+                      }}>
+                        <input
+                          type="radio"
+                          value={color.hex}
+                          checked={formData.textColor === color.hex}
+                          onChange={(e) => handleInputChange('textColor', e.target.value)}
+                        />
+                        <div style={{ 
+                          width: '20px', 
+                          height: '20px', 
+                          backgroundColor: color.hex,
+                          border: '1px solid #666',
+                          borderRadius: '3px'
+                        }} />
+                        <span style={{ fontSize: '14px' }}>{color.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Agent Preview */}
@@ -550,6 +611,60 @@ Focus on specialization over generalization - agents that do one thing excellent
             <label style={{ color: '#ffffff', display: 'block', marginBottom: '8px' }}>
               Available Tools *
             </label>
+            
+            {/* Tool Search and Categories */}
+            <div style={{ marginBottom: '12px' }}>
+              <input
+                type="text"
+                placeholder="Search tools..."
+                value={toolSearchTerm}
+                onChange={(e) => setToolSearchTerm(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '8px',
+                  backgroundColor: '#2d2d2d',
+                  color: '#ffffff',
+                  border: '1px solid #666',
+                  borderRadius: '4px',
+                  marginBottom: '8px'
+                }}
+              />
+              
+              {/* Category Filters */}
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {['core', 'productivity', 'context7', 'playwright', 'notion', 'figma', 'other'].map(category => {
+                  const toolCount = categorizeTools(availableTools)[category as keyof ReturnType<typeof categorizeTools>]?.length || 0;
+                  return (
+                    <label key={category} style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '4px',
+                      color: '#ccc',
+                      cursor: 'pointer',
+                      padding: '4px 8px',
+                      backgroundColor: selectedToolCategories.includes(category) ? '#4CAF50' : '#333',
+                      borderRadius: '4px',
+                      fontSize: '12px'
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedToolCategories.includes(category)}
+                        onChange={(e) => {
+                          const newCategories = e.target.checked
+                            ? [...selectedToolCategories, category]
+                            : selectedToolCategories.filter(c => c !== category);
+                          setSelectedToolCategories(newCategories);
+                        }}
+                        style={{ margin: '0' }}
+                      />
+                      {category} ({toolCount})
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Tool Selection Area */}
             <div style={{ 
               maxHeight: '200px', 
               overflowY: 'auto',
@@ -558,41 +673,115 @@ Focus on specialization over generalization - agents that do one thing excellent
               border: validationErrors.tools ? '2px solid #f44336' : '1px solid #666',
               borderRadius: '4px'
             }}>
-              <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
-                gap: '8px' 
-              }}>
-                {availableTools.map((tool, index) => (
-                  <label key={index} style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '8px',
-                    color: '#ccc',
-                    cursor: 'pointer'
-                  }}>
-                    <input
-                      type="checkbox"
-                      checked={formData.tools.includes(tool)}
-                      onChange={(e) => {
-                        const newTools = e.target.checked
-                          ? [...formData.tools, tool]
-                          : formData.tools.filter(t => t !== tool);
-                        handleInputChange('tools', newTools);
-                      }}
-                    />
-                    <span style={{ fontSize: '14px' }}>{tool}</span>
-                  </label>
-                ))}
-              </div>
+              {getFilteredTools().length === 0 ? (
+                <div style={{ color: '#888', textAlign: 'center', padding: '20px' }}>
+                  No tools found. Try adjusting your search or category filters.
+                </div>
+              ) : (
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
+                  gap: '6px' 
+                }}>
+                  {getFilteredTools().map((tool, index) => (
+                    <label key={index} style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '8px',
+                      color: '#ccc',
+                      cursor: 'pointer',
+                      padding: '4px',
+                      borderRadius: '3px',
+                      backgroundColor: formData.tools.includes(tool) ? '#2a5d3a' : 'transparent',
+                      fontSize: '13px'
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={formData.tools.includes(tool)}
+                        onChange={(e) => {
+                          const newTools = e.target.checked
+                            ? [...formData.tools, tool]
+                            : formData.tools.filter(t => t !== tool);
+                          handleInputChange('tools', newTools);
+                        }}
+                        style={{ margin: '0' }}
+                      />
+                      <span style={{ 
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {tool}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
+            
+            {/* Tool Selection Actions */}
+            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  const filteredTools = getFilteredTools();
+                  handleInputChange('tools', Array.from(new Set([...formData.tools, ...filteredTools])));
+                }}
+                style={{
+                  padding: '4px 8px',
+                  backgroundColor: '#4CAF50',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '3px',
+                  cursor: 'pointer',
+                  fontSize: '12px'
+                }}
+              >
+                Select All Visible
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const filteredTools = getFilteredTools();
+                  handleInputChange('tools', formData.tools.filter(tool => !filteredTools.includes(tool)));
+                }}
+                style={{
+                  padding: '4px 8px',
+                  backgroundColor: '#f44336',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '3px',
+                  cursor: 'pointer',
+                  fontSize: '12px'
+                }}
+              >
+                Deselect All Visible
+              </button>
+              <button
+                type="button"
+                onClick={() => handleInputChange('tools', [])}
+                style={{
+                  padding: '4px 8px',
+                  backgroundColor: '#666',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '3px',
+                  cursor: 'pointer',
+                  fontSize: '12px'
+                }}
+              >
+                Clear All
+              </button>
+            </div>
+            
             {validationErrors.tools && (
               <div style={{ color: '#f44336', fontSize: '14px', marginTop: '4px' }}>
                 {validationErrors.tools}
               </div>
             )}
             <div style={{ color: '#888', fontSize: '14px', marginTop: '4px' }}>
-              Selected tools: {formData.tools.length} / {availableTools.length}
+              Selected tools: {formData.tools.length} / {availableTools.length} 
+              {getFilteredTools().length !== availableTools.length && ` (${getFilteredTools().length} visible)`}
             </div>
           </div>
 
