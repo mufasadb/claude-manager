@@ -210,6 +210,235 @@ Respond with a JSON object using this exact structure. Use JSON prefilling - sta
         }
     }
 
+    // Generate JavaScript hook code using OpenRouter as fallback
+    async generateHookCode(hookRequest) {
+        const {
+            eventType,
+            pattern = '*',
+            description,
+            scope = 'user',
+            projectInfo = null,
+            userEnv = {},
+            availableServices = {}
+        } = hookRequest;
+
+        try {
+            this.validateApiKey();
+
+            const ollamaUrl = availableServices.ollama || 'http://100.83.40.11:11434';
+            const ttsUrl = availableServices.tts || 'http://100.83.40.11:8080';
+
+            const prompt = `You are generating JavaScript code for Claude Code's hook system.
+
+CLAUDE CODE HOOK SYSTEM EXPLANATION:
+
+Claude Code is Anthropic's CLI tool for software development. It has a hook system that allows users to execute custom JavaScript code in response to Claude's actions.
+
+HOOK LIFECYCLE:
+1. User works with Claude Code (AI assistant)
+2. Claude uses tools like Write, Edit, Bash, Read, Grep, MultiEdit, etc.
+3. Before/after each tool use, Claude Code triggers hook events
+4. Your generated JavaScript code executes in a sandboxed Node.js VM
+5. The code can perform actions like notifications, file operations, API calls
+
+HOOK EVENT TYPES:
+- PreToolUse: Runs BEFORE Claude executes a tool (validation, backups, warnings)
+- PostToolUse: Runs AFTER Claude executes a tool (cleanup, formatting, git operations)
+- Notification: Runs when Claude sends status messages
+- Stop: Runs when Claude completes a task/conversation
+- SubagentStop: Runs when a Claude subagent completes its work
+
+EXECUTION ENVIRONMENT:
+- Sandboxed Node.js VM (30-second timeout)
+- No file system write access (security)
+- Limited HTTP requests to approved domains
+- Access to local services (Ollama LLM, TTS)
+
+YOUR JAVASCRIPT CODE RECEIVES:
+
+hookEvent = {
+  type: '${eventType}', // The event type for this hook
+  toolName: 'Write|Edit|Bash|Read|Grep|MultiEdit|etc', // Claude tool that triggered this
+  filePaths: ['/path/to/affected/file.js'], // Files Claude is working with
+  context: { /* Tool-specific data like file content, command args */ },
+  timestamp: 1234567890
+}
+
+projectInfo = ${projectInfo ? `{
+  name: '${projectInfo.name}',           // Name of the current project
+  path: '${projectInfo.path}',          // Full project path
+  config: { /* Claude project settings */ }
+}` : 'null // null for user-level hooks'}
+
+userEnv = { /* Safe environment variables - sensitive keys filtered */ }
+
+hookMeta = {
+  id: 'hook-uuid',
+  name: 'Generated Hook',
+  scope: '${scope}'
+}
+
+utils = {
+  log(...args),                         // Console logging
+  sleep(milliseconds),                  // Async delay
+  fetch(url, options),                  // HTTP requests (restricted domains)
+  playSound('success|error|warning|info'), // System sounds
+  speak(text, options),                 // Text-to-speech via ${ttsUrl}
+  askOllama(prompt, options),           // Query Ollama LLM at ${ollamaUrl}
+  notify(message, type)                 // System notifications
+}
+
+console = {
+  log(...args),   // Logging
+  warn(...args),  // Warnings
+  error(...args)  // Errors
+}
+
+USER REQUEST:
+Event Type: ${eventType}
+File Pattern: ${pattern}
+Scope: ${scope}
+Description: ${description}
+
+GENERATE JAVASCRIPT CODE THAT:
+1. Properly handles the ${eventType} event
+2. Matches files/tools using pattern: ${pattern}
+3. Implements: ${description}
+4. Uses hookEvent data appropriately
+5. Includes error handling and user feedback
+6. Uses available utilities (utils.notify, utils.speak, etc.)
+7. Returns a meaningful status message
+
+CODE REQUIREMENTS:
+- Must be valid JavaScript for Node.js VM
+- Use async/await for asynchronous operations  
+- Include try/catch error handling
+- No file system writes, no dangerous operations
+- Comment the code to explain the logic
+- Return a string status message
+
+CRITICAL REQUIREMENTS:
+- Generate ONLY plain JavaScript code that can be executed directly in the VM context
+- DO NOT wrap the code in a function definition
+- DO NOT use function parameters  
+- The variables (hookEvent, projectInfo, userEnv, hookMeta, utils, console) are available as globals
+- DO NOT include markdown code blocks or explanations
+
+RESPONSE FORMAT:
+Return only the JavaScript code without markdown formatting or explanations. The code should be ready to execute in the hook system.`;
+
+            console.log('Generating hook code with OpenRouter...');
+            
+            const completion = await this.client.chat.completions.create({
+                model: this.model,
+                messages: [
+                    {
+                        role: "user",
+                        content: prompt
+                    }
+                ],
+                temperature: 0.1, // Low temperature for consistent code
+                max_tokens: 1500,
+                extra_headers: {
+                    "X-Title": "Claude Manager Hook Generator",
+                }
+            });
+
+            const generatedCode = completion.choices[0].message.content.trim();
+            
+            // Clean the code (remove markdown if present)
+            const cleanedCode = this.extractJavaScriptCode(generatedCode);
+
+            return {
+                success: true,
+                code: cleanedCode,
+                model: this.model,
+                provider: 'openrouter',
+                metadata: {
+                    eventType,
+                    pattern,
+                    description,
+                    scope,
+                    generatedAt: Date.now()
+                }
+            };
+
+        } catch (error) {
+            console.error('Hook code generation failed with OpenRouter:', error);
+            
+            return {
+                success: false,
+                error: error.message,
+                fallbackCode: this.generateFallbackHookCode(eventType, description)
+            };
+        }
+    }
+
+    // Extract JavaScript code from LLM response
+    extractJavaScriptCode(response) {
+        if (!response || typeof response !== 'string') {
+            throw new Error('Invalid response from OpenRouter');
+        }
+
+        // Remove markdown code blocks if present
+        const codeBlockMatch = response.match(/```(?:javascript|js)?\s*([\s\S]*?)\s*```/);
+        if (codeBlockMatch) {
+            return codeBlockMatch[1].trim();
+        }
+
+        // If no code blocks, clean and return the response
+        const cleaned = response.trim()
+            .replace(/^```javascript\s*/i, '')
+            .replace(/^```js\s*/i, '')
+            .replace(/```\s*$/, '')
+            .trim();
+
+        if (cleaned.length === 0) {
+            throw new Error('No JavaScript code found in OpenRouter response');
+        }
+
+        return cleaned;
+    }
+
+    // Generate fallback hook code if OpenRouter fails
+    generateFallbackHookCode(eventType, description) {
+        const fallbacks = {
+            'PreToolUse': `// Pre-tool hook: ${description}
+console.log('Pre-tool event:', hookEvent.toolName);
+await utils.notify('About to execute: ' + hookEvent.toolName, 'info');
+return 'Pre-tool hook executed';`,
+
+            'PostToolUse': `// Post-tool hook: ${description}  
+console.log('Post-tool event:', hookEvent.toolName);
+if (hookEvent.filePaths && hookEvent.filePaths.length > 0) {
+  await utils.notify('Completed ' + hookEvent.toolName + ' on ' + hookEvent.filePaths.length + ' files', 'success');
+}
+return 'Post-tool hook executed';`,
+
+            'Notification': `// Notification hook: ${description}
+const message = hookEvent.context?.message || 'Notification received';
+console.log('Notification:', message);
+await utils.notify(message, 'info');
+return 'Notification processed';`,
+
+            'Stop': `// Task completion hook: ${description}
+console.log('Task completed at:', new Date().toISOString());
+await utils.playSound('success');
+await utils.notify('Claude task completed', 'success');
+return 'Task completion processed';`,
+
+            'SubagentStop': `// Subagent completion hook: ${description}
+console.log('Subagent completed at:', new Date().toISOString());
+await utils.notify('Subagent task completed', 'success');
+return 'Subagent completion processed';`
+        };
+
+        return fallbacks[eventType] || `// Generic hook: ${description}
+console.log('Hook triggered:', hookEvent.type);
+await utils.notify('Hook executed', 'info');
+return 'Hook executed successfully';`;
+    }
+
     createAgentGenerationPrompt(agentName, description, availableTools, scope) {
         return `<role>
 You are an expert AI agent architect with deep knowledge of Anthropic's Constitutional AI principles, system message design patterns, and production deployment best practices. You create professional, effective agent system messages that balance capability with safety.

@@ -70,7 +70,8 @@ const HookEvents: React.FC = () => {
   useEffect(() => {
     const connectWebSocket = () => {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}`;
+      // Connect directly to backend WebSocket server on 3455
+      const wsUrl = `${protocol}//localhost:3455`;
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
@@ -96,7 +97,16 @@ const HookEvents: React.FC = () => {
           
           switch (data.type) {
             case 'hookEventReceived':
-              setEvents(prev => [data.event, ...prev.slice(0, limit - 1)]);
+              setEvents(prev => {
+                // Check for duplicate events by ID (most reliable)
+                const isDuplicate = prev.some(existing => existing.id === data.event.id);
+                
+                if (isDuplicate) {
+                  return prev; // Skip duplicate
+                }
+                
+                return [data.event, ...prev.slice(0, limit - 1)];
+              });
               break;
               
             case 'hookEventProcessed':
@@ -125,7 +135,7 @@ const HookEvents: React.FC = () => {
 
     const ws = connectWebSocket();
     return () => ws.close();
-  }, [limit]);
+  }, []); // Remove limit dependency to prevent reconnections
 
   const formatTimestamp = (timestamp: number) => {
     return new Date(timestamp).toLocaleTimeString();

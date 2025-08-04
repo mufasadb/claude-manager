@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ApiService } from '../../services/ApiService';
 import { SlashCommandFormData, SlashCommand } from '../../types';
 
@@ -23,14 +23,15 @@ const SlashCommandCreator: React.FC<SlashCommandCreatorProps> = ({ projects }) =
 
   const [existingCommands, setExistingCommands] = useState<SlashCommand[]>([]);
   const [showCommandsList, setShowCommandsList] = useState(false);
+  const [deletingCommand, setDeletingCommand] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<{
+    command: SlashCommand | null;
+    isOpen: boolean;
+  }>({ command: null, isOpen: false });
 
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    loadExistingCommands();
-  }, [formData.scope, formData.projectName]);
-
-  const loadExistingCommands = async () => {
+  const loadExistingCommands = useCallback(async () => {
     try {
       const commands = await ApiService.listSlashCommands(
         formData.scope,
@@ -40,7 +41,11 @@ const SlashCommandCreator: React.FC<SlashCommandCreatorProps> = ({ projects }) =
     } catch (error) {
       console.warn('Failed to load existing commands:', error);
     }
-  };
+  }, [formData.scope, formData.projectName]);
+
+  useEffect(() => {
+    loadExistingCommands();
+  }, [loadExistingCommands]);
 
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
@@ -148,6 +153,52 @@ const SlashCommandCreator: React.FC<SlashCommandCreatorProps> = ({ projects }) =
     return `/${path}`;
   };
 
+  const handleDeleteClick = (command: SlashCommand) => {
+    setShowDeleteConfirm({ command, isOpen: true });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!showDeleteConfirm.command) return;
+
+    const command = showDeleteConfirm.command;
+    setDeletingCommand(command.relativePath);
+    
+    try {
+      const result = await ApiService.deleteSlashCommand(
+        formData.scope,
+        command.relativePath,
+        formData.scope === 'project' ? formData.projectName : undefined
+      );
+
+      if (result.success) {
+        setSubmitStatus({
+          type: 'success',
+          message: `Successfully deleted command: ${command.relativePath}`
+        });
+        
+        // Reload commands list
+        await loadExistingCommands();
+      } else {
+        setSubmitStatus({
+          type: 'error',
+          message: result.error || 'Failed to delete command'
+        });
+      }
+    } catch (error) {
+      setSubmitStatus({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to delete command'
+      });
+    } finally {
+      setDeletingCommand(null);
+      setShowDeleteConfirm({ command: null, isOpen: false });
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setShowDeleteConfirm({ command: null, isOpen: false });
+  };
+
   const projectOptions = Object.keys(projects);
 
   return (
@@ -191,14 +242,39 @@ const SlashCommandCreator: React.FC<SlashCommandCreatorProps> = ({ projects }) =
                   marginBottom: '8px', 
                   padding: '8px', 
                   backgroundColor: '#333', 
-                  borderRadius: '4px' 
+                  borderRadius: '4px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start'
                 }}>
-                  <div style={{ color: '#4CAF50', fontWeight: 'bold' }}>
-                    /{cmd.category ? `${cmd.category}:${cmd.name}` : cmd.name}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ color: '#4CAF50', fontWeight: 'bold' }}>
+                      /{cmd.category ? `${cmd.category}:${cmd.name}` : cmd.name}
+                    </div>
+                    <div style={{ color: '#ccc', fontSize: '14px', marginTop: '4px' }}>
+                      {cmd.description}
+                    </div>
                   </div>
-                  <div style={{ color: '#ccc', fontSize: '14px', marginTop: '4px' }}>
-                    {cmd.description}
-                  </div>
+                  <button
+                    onClick={() => handleDeleteClick(cmd)}
+                    disabled={deletingCommand === cmd.relativePath}
+                    style={{
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      color: deletingCommand === cmd.relativePath ? '#666' : '#f44336',
+                      cursor: deletingCommand === cmd.relativePath ? 'not-allowed' : 'pointer',
+                      padding: '4px',
+                      borderRadius: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginLeft: '8px',
+                      fontSize: '16px'
+                    }}
+                    title={deletingCommand === cmd.relativePath ? 'Deleting...' : 'Delete command'}
+                  >
+                    {deletingCommand === cmd.relativePath ? '⏳' : '🗑️'}
+                  </button>
                 </div>
               ))}
             </div>
@@ -423,6 +499,89 @@ const SlashCommandCreator: React.FC<SlashCommandCreatorProps> = ({ projects }) =
           `}</style>
         </div>
       </form>
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteConfirm.isOpen && showDeleteConfirm.command && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: '#2d2d2d',
+            padding: '24px',
+            borderRadius: '8px',
+            border: '1px solid #666',
+            maxWidth: '500px',
+            width: '90%'
+          }}>
+            <h3 style={{ color: '#fff', marginTop: 0, marginBottom: '16px' }}>
+              Confirm Delete Command
+            </h3>
+            <p style={{ color: '#ccc', marginBottom: '20px' }}>
+              Are you sure you want to delete the slash command:
+            </p>
+            <div style={{
+              backgroundColor: '#1e1e1e',
+              padding: '12px',
+              borderRadius: '4px',
+              border: '1px solid #444',
+              marginBottom: '20px'
+            }}>
+              <div style={{ color: '#4CAF50', fontWeight: 'bold', marginBottom: '4px' }}>
+                /{showDeleteConfirm.command.category ? 
+                  `${showDeleteConfirm.command.category}:${showDeleteConfirm.command.name}` : 
+                  showDeleteConfirm.command.name}
+              </div>
+              <div style={{ color: '#ccc', fontSize: '14px' }}>
+                {showDeleteConfirm.command.description}
+              </div>
+              <div style={{ color: '#888', fontSize: '12px', marginTop: '8px' }}>
+                File: {showDeleteConfirm.command.relativePath}
+              </div>
+            </div>
+            <p style={{ color: '#f44336', fontSize: '14px', marginBottom: '20px' }}>
+              ⚠️ This action cannot be undone. The command file will be permanently deleted.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={handleDeleteCancel}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#444',
+                  color: '#fff',
+                  border: '1px solid #666',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                disabled={deletingCommand !== null}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: deletingCommand !== null ? '#666' : '#f44336',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: deletingCommand !== null ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {deletingCommand !== null ? 'Deleting...' : 'Delete Command'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

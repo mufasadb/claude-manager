@@ -69,6 +69,7 @@ const HookManagement: React.FC<HookManagementProps> = ({ scope, projectName }) =
     }
   };
 
+
   const handleToggleHook = async (hook: Hook) => {
     try {
       const response = await fetch(`/api/hooks/update/${scope}/${hook.id}`, {

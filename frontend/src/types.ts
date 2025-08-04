@@ -71,16 +71,51 @@ export interface SessionCountdown {
 export interface SessionStats {
   enabled: boolean;
   currentPeriodStart: string;
+  nextPeriodStart: string;
+  billingDate: number;
   monthlySessions: number;
   sessionHistory: Array<{
     start: string;
     end: string;
     duration: number;
+    tokens: number;
+    inputTokens: number;
+    outputTokens: number;
+    userTurns: number;
+    userMessages: number;
+    assistantMessages: number;
+    messageCount: number;
   }>;
   planLimits: {
-    pro: number;
-    maxFive: number;
-    maxTwenty: number;
+    max: number;
+  };
+  periodMetrics: {
+    totalDaysInPeriod: number;
+    daysElapsed: number;
+    daysRemaining: number;
+    projectedSessions: number;
+    sessionsPerDay: number;
+    sessionsRemaining: number;
+    sessionsPerDayNeeded: number;
+  };
+  periodTotals: {
+    tokens: number;
+    inputTokens: number;
+    outputTokens: number;
+    userTurns: number;
+    messageCount: number;
+  };
+  lifetimeStats: {
+    totalSessions: number;
+    totalTokens: number;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalUserTurns: number;
+    totalMessages: number;
+    costs: {
+      sonnet4: number;
+      opus4: number;
+    };
   };
 }
 

@@ -208,7 +208,7 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
       <td>{mcp.command}</td>
       <td>{mcp.transport}</td>
       <td>
-        {Object.keys(mcp.envVars).length > 0 ? (
+        {mcp.envVars && Object.keys(mcp.envVars).length > 0 ? (
           <span className="env-count">{Object.keys(mcp.envVars).length} vars</span>
         ) : (
           <span className="no-env">None</span>

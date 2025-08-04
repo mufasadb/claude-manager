@@ -246,3 +246,226 @@
 .session-sidebar-content::-webkit-scrollbar-thumb:hover {
   background: #6b7280;
 }
+
+/* New billing date editor styles */
+.billing-date-editor {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.billing-date-input {
+  width: 50px;
+  padding: 0.25rem 0.5rem;
+  background: #374151;
+  border: 1px solid #4b5563;
+  border-radius: 4px;
+  color: #f9fafb;
+  font-size: 0.875rem;
+}
+
+.billing-date-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.save-button, .cancel-button {
+  padding: 0.25rem 0.5rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.save-button {
+  background: #10b981;
+  color: white;
+}
+
+.save-button:hover {
+  background: #059669;
+}
+
+.cancel-button {
+  background: #6b7280;
+  color: white;
+}
+
+.cancel-button:hover {
+  background: #4b5563;
+}
+
+.editable-billing-date {
+  cursor: pointer;
+  color: #3b82f6;
+  text-decoration: underline;
+}
+
+.editable-billing-date:hover {
+  color: #60a5fa;
+}
+
+/* Session tracking styles */
+.projected-sessions.over-limit {
+  color: #ef4444;
+  font-weight: bold;
+}
+
+.projected-sessions.under-limit {
+  color: #10b981;
+}
+
+.daily-target {
+  color: #f59e0b;
+  font-weight: 500;
+}
+
+.sessions-count {
+  font-weight: bold;
+  color: #3b82f6;
+}
+
+.token-count {
+  font-weight: bold;
+  color: #10b981;
+}
+
+.turn-count {
+  font-weight: bold;
+  color: #f59e0b;
+}
+
+/* Enhanced session item layout */
+.session-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: #374151;
+  border-radius: 6px;
+  margin-bottom: 0.5rem;
+}
+
+.session-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.session-metrics {
+  display: flex;
+  gap: 1rem;
+  padding: 0.25rem 0;
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+}
+
+.metric-value {
+  font-weight: bold;
+  color: #f9fafb;
+  font-size: 0.875rem;
+}
+
+.metric-label {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  text-transform: uppercase;
+}
+
+/* Lifetime statistics styles */
+.lifetime-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.75rem;
+  background: #374151;
+  border-radius: 6px;
+}
+
+.stat-value {
+  font-size: 1.25rem;
+  font-weight: bold;
+  color: #f9fafb;
+  margin-bottom: 0.25rem;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.cost-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: #374151;
+  border-radius: 6px;
+}
+
+.cost-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #f9fafb;
+}
+
+.cost-value {
+  font-weight: bold;
+  color: #10b981;
+}
+
+/* Session history header with reprocess button */
+.session-history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.session-history-header h3 {
+  margin: 0;
+}
+
+.reprocess-button {
+  padding: 0.375rem 0.75rem;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 500;
+}
+
+.reprocess-button:hover:not(:disabled) {
+  background: #2563eb;
+  transform: translateY(-1px);
+}
+
+.reprocess-button:disabled {
+  background: #6b7280;
+  cursor: not-allowed;
+  opacity: 0.7;
+}

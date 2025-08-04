@@ -1,0 +1,7 @@
+Checking MCP server health...
+
+context7: npx -y @upstash/context7-mcp - ✓ Connected
+notion: npx -y @notionhq/notion-mcp-server - ✓ Connected
+figma: npx figma-mcp - ✓ Connected
+meta-agent: node /Users/danielbeach/Code/claude-manager/backend/services/meta-agent-mcp-server.js - ✓ Connected
+playwright: npx @playwright/mcp@latest - ✓ Connected

@@ -84,9 +84,23 @@ class SessionService {
             } else if (data.message && data.message.role) {
               role = data.message.role;
               content = data.message.content || '';
+            } else if (data.type) {
+              // Handle cases where type is 'user' or 'assistant'
+              role = data.type === 'user' ? 'user' : data.type === 'assistant' ? 'assistant' : data.type;
+              content = data.message ? (data.message.content || '') : (data.content || '');
             } else {
               role = 'unknown';
               content = JSON.stringify(data);
+            }
+            
+            // Check if this is a tool result message (should not count as user turn)
+            if (role === 'user' && data.message && Array.isArray(data.message.content)) {
+              const hasToolResult = data.message.content.some(item => 
+                item && typeof item === 'object' && item.type === 'tool_result'
+              );
+              if (hasToolResult) {
+                role = 'tool_result'; // Mark as tool result, not user message
+              }
             }
             
             // Extract usage information if available
@@ -202,15 +216,41 @@ class SessionService {
           start: messageTime.getTime(),
           end: messageTime.getTime(),
           messageCount: 1,
-          tokens: message.usage ? (message.usage.input_tokens || 0) + (message.usage.output_tokens || 0) : 0,
+          userTurns: 0, // Will be calculated based on user-assistant pairs
+          userMessages: message.role === 'user' ? 1 : 0,
+          assistantMessages: message.role === 'assistant' ? 1 : 0,
+          tokens: message.usage ? 
+            (message.usage.input_tokens || 0) + 
+            (message.usage.output_tokens || 0) + 
+            (message.usage.cache_creation_input_tokens || 0) + 
+            (message.usage.cache_read_input_tokens || 0) : 0,
+          inputTokens: message.usage ? 
+            (message.usage.input_tokens || 0) + 
+            (message.usage.cache_creation_input_tokens || 0) + 
+            (message.usage.cache_read_input_tokens || 0) : 0,
+          outputTokens: message.usage ? (message.usage.output_tokens || 0) : 0,
           files: new Set([message.file])
         };
       } else {
         // Extend current session
         currentSessionData.end = messageTime.getTime();
         currentSessionData.messageCount++;
+        if (message.role === 'user') {
+          currentSessionData.userMessages++;
+        } else if (message.role === 'assistant') {
+          currentSessionData.assistantMessages++;
+        }
         if (message.usage) {
-          currentSessionData.tokens += (message.usage.input_tokens || 0) + (message.usage.output_tokens || 0);
+          currentSessionData.tokens += 
+            (message.usage.input_tokens || 0) + 
+            (message.usage.output_tokens || 0) + 
+            (message.usage.cache_creation_input_tokens || 0) + 
+            (message.usage.cache_read_input_tokens || 0);
+          currentSessionData.inputTokens += 
+            (message.usage.input_tokens || 0) + 
+            (message.usage.cache_creation_input_tokens || 0) + 
+            (message.usage.cache_read_input_tokens || 0);
+          currentSessionData.outputTokens += (message.usage.output_tokens || 0);
         }
         currentSessionData.files.add(message.file);
       }
@@ -221,8 +261,90 @@ class SessionService {
       sessions.push(currentSessionData);
     }
     
-    // Convert file sets to arrays for JSON serialization
+    // Calculate user turns and convert file sets to arrays for JSON serialization
     sessions.forEach(session => {
+      // User turns = number of times the user initiated a conversation/question
+      // Each user message represents one turn where the human asked something
+      session.userTurns = session.userMessages || 0;
+      session.files = Array.from(session.files);
+    });
+    
+    return { sessions, count: sessions.length };
+  }
+
+  // Calculate sessions for lifetime stats (no billing period filtering)
+  calculateSessionsLifetime(messages) {
+    if (!messages.length) return { sessions: [], count: 0 };
+    
+    const sessions = [];
+    let currentSessionStart = null;
+    let currentSessionData = null;
+    
+    // Process ALL messages without billing period filtering
+    for (const message of messages) {
+      const messageTime = new Date(message.timestamp);
+      
+      // Start new session if more than 5 hours since last activity
+      if (!currentSessionStart || (messageTime.getTime() - currentSessionStart.getTime()) > (5 * 60 * 60 * 1000)) {
+        // Save previous session
+        if (currentSessionData) {
+          sessions.push(currentSessionData);
+        }
+        
+        // Start new session
+        currentSessionStart = messageTime;
+        currentSessionData = {
+          start: messageTime.getTime(),
+          end: messageTime.getTime(),
+          messageCount: 1,
+          userTurns: 0,
+          userMessages: message.role === 'user' ? 1 : 0,
+          assistantMessages: message.role === 'assistant' ? 1 : 0,
+          tokens: message.usage ? 
+            (message.usage.input_tokens || 0) + 
+            (message.usage.output_tokens || 0) + 
+            (message.usage.cache_creation_input_tokens || 0) + 
+            (message.usage.cache_read_input_tokens || 0) : 0,
+          inputTokens: message.usage ? 
+            (message.usage.input_tokens || 0) + 
+            (message.usage.cache_creation_input_tokens || 0) + 
+            (message.usage.cache_read_input_tokens || 0) : 0,
+          outputTokens: message.usage ? (message.usage.output_tokens || 0) : 0,
+          files: new Set([message.file])
+        };
+      } else {
+        // Extend current session
+        currentSessionData.end = messageTime.getTime();
+        currentSessionData.messageCount++;
+        if (message.role === 'user') {
+          currentSessionData.userMessages++;
+        } else if (message.role === 'assistant') {
+          currentSessionData.assistantMessages++;
+        }
+        if (message.usage) {
+          currentSessionData.tokens += 
+            (message.usage.input_tokens || 0) + 
+            (message.usage.output_tokens || 0) + 
+            (message.usage.cache_creation_input_tokens || 0) + 
+            (message.usage.cache_read_input_tokens || 0);
+          currentSessionData.inputTokens += 
+            (message.usage.input_tokens || 0) + 
+            (message.usage.cache_creation_input_tokens || 0) + 
+            (message.usage.cache_read_input_tokens || 0);
+          currentSessionData.outputTokens += (message.usage.output_tokens || 0);
+        }
+        currentSessionData.files.add(message.file);
+      }
+    }
+    
+    // Don't forget the last session
+    if (currentSessionData) {
+      sessions.push(currentSessionData);
+    }
+    
+    // Calculate user turns and convert file sets to arrays for JSON serialization
+    sessions.forEach(session => {
+      session.userTurns = session.userMessages || 0;
       session.files = Array.from(session.files);
     });
     
@@ -230,8 +352,11 @@ class SessionService {
   }
 
   // Session Statistics
-  getSessionStats() {
+  async getSessionStats() {
     const now = new Date();
+    
+    // Get all messages for lifetime calculations
+    const messages = await this.scanAllJSONLFiles();
     
     // Calculate billing period start
     const currentMonth = now.getMonth();
@@ -243,6 +368,69 @@ class SessionService {
       currentPeriodStart = new Date(currentYear, currentMonth - 1, this.state.billingDate);
     }
 
+    // Calculate next period start
+    let nextPeriodStart;
+    if (now.getDate() >= this.state.billingDate) {
+      nextPeriodStart = new Date(currentYear, currentMonth + 1, this.state.billingDate);
+    } else {
+      nextPeriodStart = new Date(currentYear, currentMonth, this.state.billingDate);
+    }
+
+    // Calculate days in current billing period and days elapsed
+    const totalDaysInPeriod = Math.ceil((nextPeriodStart.getTime() - currentPeriodStart.getTime()) / (1000 * 60 * 60 * 24));
+    const daysElapsed = Math.ceil((now.getTime() - currentPeriodStart.getTime()) / (1000 * 60 * 60 * 24));
+    const daysRemaining = totalDaysInPeriod - daysElapsed;
+
+    // Calculate projected sessions based on current usage
+    const sessionsPerDay = daysElapsed > 0 ? this.state.monthlySessions / daysElapsed : 0;
+    const projectedSessions = Math.round(sessionsPerDay * totalDaysInPeriod);
+
+    // Calculate sessions needed per day to reach exactly 50
+    const sessionsRemaining = Math.max(0, 50 - this.state.monthlySessions);
+    const sessionsPerDayNeeded = daysRemaining > 0 ? Math.ceil(sessionsRemaining / daysRemaining) : 0;
+
+    // Calculate period totals (current billing period only)
+    const currentPeriodSessions = (this.state.sessionHistory || []).filter(session => {
+      const sessionDate = new Date(session.start);
+      return sessionDate >= currentPeriodStart;
+    });
+
+    const periodTotals = currentPeriodSessions.reduce((totals, session) => {
+      return {
+        tokens: totals.tokens + (session.tokens || 0),
+        inputTokens: totals.inputTokens + (session.inputTokens || 0),
+        outputTokens: totals.outputTokens + (session.outputTokens || 0),
+        userTurns: totals.userTurns + (session.userTurns || 0),
+        messageCount: totals.messageCount + (session.messageCount || 0)
+      };
+    }, { tokens: 0, inputTokens: 0, outputTokens: 0, userTurns: 0, messageCount: 0 });
+
+    // Calculate lifetime totals (all sessions ever, not just current billing period)
+    // Use a very old billing date to ensure we get ALL sessions ever
+    const { sessions: allTimeSessions } = this.calculateSessionsLifetime(messages);
+    
+    const lifetimeTotals = allTimeSessions.reduce((totals, session) => {
+      return {
+        tokens: totals.tokens + (session.tokens || 0),
+        inputTokens: totals.inputTokens + (session.inputTokens || 0),
+        outputTokens: totals.outputTokens + (session.outputTokens || 0),
+        userTurns: totals.userTurns + (session.userTurns || 0),
+        messageCount: totals.messageCount + (session.messageCount || 0),
+        sessions: totals.sessions + 1
+      };
+    }, { tokens: 0, inputTokens: 0, outputTokens: 0, userTurns: 0, messageCount: 0, sessions: 0 });
+
+    // Calculate costs (Claude API pricing for Sonnet 4 and Opus 4 - 2025)
+    const sonnet4InputPrice = 3.00 / 1000000;  // $3.00 per million input tokens
+    const sonnet4OutputPrice = 15.00 / 1000000; // $15.00 per million output tokens
+    const opus4InputPrice = 15.00 / 1000000;   // $15.00 per million input tokens  
+    const opus4OutputPrice = 75.00 / 1000000;  // $75.00 per million output tokens
+
+    const lifetimeCosts = {
+      sonnet4: (lifetimeTotals.inputTokens * sonnet4InputPrice) + (lifetimeTotals.outputTokens * sonnet4OutputPrice),
+      opus4: (lifetimeTotals.inputTokens * opus4InputPrice) + (lifetimeTotals.outputTokens * opus4OutputPrice)
+    };
+
     // Format session history for frontend with proper duration calculation
     const formattedHistory = (this.state.sessionHistory || []).map(session => {
       try {
@@ -253,14 +441,28 @@ class SessionService {
         return {
           start: startTime.toISOString(),
           end: endTime.toISOString(),
-          duration: duration
+          duration: duration,
+          tokens: session.tokens || 0,
+          inputTokens: session.inputTokens || 0,
+          outputTokens: session.outputTokens || 0,
+          userTurns: session.userTurns || 0,
+          userMessages: session.userMessages || 0,
+          assistantMessages: session.assistantMessages || 0,
+          messageCount: session.messageCount || 0
         };
       } catch (error) {
         console.error('Error formatting session history entry:', error, session);
         return {
           start: new Date().toISOString(),
           end: new Date().toISOString(),
-          duration: 0
+          duration: 0,
+          tokens: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          userTurns: 0,
+          userMessages: 0,
+          assistantMessages: 0,
+          messageCount: 0
         };
       }
     }).filter(session => session !== null);
@@ -268,19 +470,49 @@ class SessionService {
     const stats = {
       enabled: this.state.enabled,
       currentPeriodStart: currentPeriodStart.toISOString(),
+      nextPeriodStart: nextPeriodStart.toISOString(),
       billingDate: this.state.billingDate,
       monthlySessions: this.state.monthlySessions,
       sessionHistory: formattedHistory,
       timeRemaining: null,
       planLimits: {
-        pro: 45,
-        maxFive: 225,
-        maxTwenty: 900
+        max: 50
       },
       estimatedCosts: {
-        pro: { monthly: 20, perSession: 20 / 45 },
-        maxFive: { monthly: 100, perSession: 100 / 225 },
-        maxTwenty: { monthly: 400, perSession: 400 / 900 }
+        pro: { monthly: 20, perSession: 20 / 50 },
+        maxFive: { monthly: 100, perSession: 100 / 50 },
+        maxTwenty: { monthly: 400, perSession: 400 / 50 }
+      },
+      // New enhanced metrics
+      periodMetrics: {
+        totalDaysInPeriod,
+        daysElapsed,
+        daysRemaining,
+        projectedSessions,
+        sessionsPerDay: Math.round(sessionsPerDay * 10) / 10, // Round to 1 decimal
+        sessionsRemaining,
+        sessionsPerDayNeeded
+      },
+      // Period totals for current billing period
+      periodTotals: {
+        tokens: periodTotals.tokens,
+        inputTokens: periodTotals.inputTokens, 
+        outputTokens: periodTotals.outputTokens,
+        userTurns: periodTotals.userTurns,
+        messageCount: periodTotals.messageCount
+      },
+      // Lifetime statistics
+      lifetimeStats: {
+        totalSessions: lifetimeTotals.sessions,
+        totalTokens: lifetimeTotals.tokens,
+        totalInputTokens: lifetimeTotals.inputTokens,
+        totalOutputTokens: lifetimeTotals.outputTokens,
+        totalUserTurns: lifetimeTotals.userTurns,
+        totalMessages: lifetimeTotals.messageCount,
+        costs: {
+          sonnet4: Math.round(lifetimeCosts.sonnet4 * 100) / 100, // Round to 2 decimal places
+          opus4: Math.round(lifetimeCosts.opus4 * 100) / 100
+        }
       }
     };
 

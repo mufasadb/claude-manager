@@ -11,6 +11,7 @@ const FileWatcher = require('./services/file-watcher');
 const MCPService = require('./services/mcp-service');
 const CommandService = require('./services/command-service');
 const AgentService = require('./services/agent-service');
+const ClaudeConfigReader = require('./services/claude-config-reader');
 const HookRegistry = require('./services/data/hook-registry');
 const HookEventService = require('./services/hook-event-service');
 const HookGenerator = require('./services/operations/hook-generator');
@@ -37,7 +38,8 @@ class ClaudeManager {
     this.sessionService = new SessionService();
     this.projectService = new ProjectService();
     this.fileWatcher = new FileWatcher();
-    this.mcpService = new MCPService();
+    this.claudeConfigReader = new ClaudeConfigReader();
+    this.mcpService = new MCPService(this.claudeConfigReader);
     this.commandService = new CommandService();
     this.agentService = new AgentService();
     this.hookRegistry = new HookRegistry();
@@ -77,6 +79,9 @@ class ClaudeManager {
     
     // Set up web server LAST
     this.setupWebServer();
+    
+    // Set up periodic MCP sync
+    this.setupPeriodicMCPSync();
     
     console.log('🚀 Claude Manager started on http://localhost:3455');
   }
@@ -219,6 +224,52 @@ class ClaudeManager {
     );
   }
 
+  // Periodic MCP Sync
+  setupPeriodicMCPSync() {
+    // Initial sync on startup
+    setTimeout(async () => {
+      try {
+        console.log('Performing initial MCP sync on startup...');
+        const syncResult = await this.mcpService.syncWithClaudeConfig();
+        if (syncResult.success) {
+          this.state.mcps = this.mcpService.getState();
+          this.broadcastToClients({ 
+            type: 'mcpUpdate', 
+            mcps: this.state.mcps,
+            syncTriggered: true,
+            syncReason: 'startup_sync'
+          });
+          console.log('Initial MCP sync completed successfully');
+        }
+      } catch (error) {
+        console.error('Initial MCP sync failed:', error);
+      }
+    }, 5000); // Wait 5 seconds after startup
+
+    // Periodic sync every 5 minutes
+    this.mcpSyncInterval = setInterval(async () => {
+      try {
+        console.log('Performing periodic MCP sync...');
+        const syncResult = await this.mcpService.syncWithClaudeConfig();
+        if (syncResult.success && (syncResult.syncResults?.added?.length > 0 || 
+                                   syncResult.syncResults?.removed?.length > 0 || 
+                                   syncResult.syncResults?.movedToDisabled?.length > 0)) {
+          this.state.mcps = this.mcpService.getState();
+          this.broadcastToClients({ 
+            type: 'mcpUpdate', 
+            mcps: this.state.mcps,
+            syncTriggered: true,
+            syncReason: 'periodic_sync',
+            changes: syncResult.syncResults
+          });
+          console.log('Periodic MCP sync found changes and updated state');
+        }
+      } catch (error) {
+        console.error('Periodic MCP sync failed:', error);
+      }
+    }, 5 * 60 * 1000); // Every 5 minutes
+  }
+
   async onFileChange(scope, filePath, projectName) {
     console.log(`File changed: ${filePath} (${scope}${projectName ? ` - ${projectName}` : ''})`);
     
@@ -228,6 +279,26 @@ class ClaudeManager {
     } else if (scope === 'project' && projectName) {
       await this.projectService.refreshProjectConfig(projectName);
       await this.projectService.refreshProjectEnvVars(projectName);
+    }
+    
+    // Trigger MCP sync if settings.json files changed (they contain MCP configurations)
+    if (filePath.includes('settings.json')) {
+      try {
+        console.log('Settings file changed, triggering MCP sync...');
+        const syncResult = await this.mcpService.syncWithClaudeConfig();
+        if (syncResult.success) {
+          this.state.mcps = this.mcpService.getState();
+          // Broadcast MCP update to clients
+          this.broadcastToClients({ 
+            type: 'mcpUpdate', 
+            mcps: this.state.mcps,
+            syncTriggered: true,
+            syncReason: 'settings_file_changed'
+          });
+        }
+      } catch (error) {
+        console.error('Failed to sync MCPs after settings file change:', error);
+      }
     }
     
     // Broadcast file change to connected clients
@@ -752,9 +823,50 @@ class ClaudeManager {
       }
     });
 
-    this.app.get('/api/session-stats', (req, res) => {
-      const stats = this.sessionService.getSessionStats();
+    this.app.get('/api/session-stats', async (req, res) => {
+      const stats = await this.sessionService.getSessionStats();
       res.json(stats);
+    });
+
+    this.app.post('/api/set-billing-date', async (req, res) => {
+      try {
+        const { billingDate } = req.body;
+        if (!billingDate || billingDate < 1 || billingDate > 31) {
+          return res.status(400).json({ error: 'Billing date must be between 1 and 31' });
+        }
+        
+        await this.sessionService.setBillingDate(billingDate);
+        const updatedStats = await this.sessionService.getSessionStats();
+        
+        // Broadcast the updated stats to all connected clients
+        this.broadcastToClients({
+          type: 'sessionStatsUpdate',
+          stats: updatedStats
+        });
+        
+        res.json({ success: true, billingDate, stats: updatedStats });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/reprocess-sessions', async (req, res) => {
+      try {
+        // Force a complete re-processing of all session data to extract token usage
+        await this.sessionService.updateSessionTracking();
+        const updatedStats = await this.sessionService.getSessionStats();
+        
+        // Broadcast the updated stats to all connected clients
+        this.broadcastToClients({
+          type: 'sessionStatsUpdate',
+          stats: updatedStats
+        });
+        
+        res.json({ success: true, message: 'Session data reprocessed successfully', stats: updatedStats });
+      } catch (error) {
+        console.error('Error reprocessing sessions:', error);
+        res.status(500).json({ error: error.message });
+      }
     });
 
     this.app.get('/api/countdown', async (req, res) => {
@@ -783,7 +895,7 @@ class ClaudeManager {
     // Session status endpoint (alias for session-stats with detailed metrics)
     this.app.get('/api/session-status', async (req, res) => {
       try {
-        const stats = this.sessionService.getSessionStats();
+        const stats = await this.sessionService.getSessionStats();
         
         // Add detailed metrics for frontend consumption
         const detailedStats = {
@@ -873,7 +985,7 @@ class ClaudeManager {
     // Token usage summary endpoint
     this.app.get('/api/token-usage', async (req, res) => {
       try {
-        const stats = this.sessionService.getSessionStats();
+        const stats = await this.sessionService.getSessionStats();
         const now = Date.now();
         
         // Calculate lifetime tokens
@@ -1009,6 +1121,34 @@ class ClaudeManager {
       }
     });
 
+    this.app.get('/api/mcp/actual-config', async (req, res) => {
+      try {
+        const actualConfig = await this.claudeConfigReader.getActualMCPConfiguration();
+        res.json(actualConfig);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/mcp/sync-with-claude', async (req, res) => {
+      try {
+        const syncResult = await this.claudeConfigReader.syncWithClaudeManagerConfig();
+        
+        if (syncResult.success) {
+          // Broadcast the sync results to connected clients
+          this.broadcastToClients({ 
+            type: 'mcpConfigSynced', 
+            syncResults: syncResult.syncResults,
+            managerConfig: syncResult.managerConfig
+          });
+        }
+        
+        res.json(syncResult);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
     this.app.get('/api/mcp/list/:scope', async (req, res) => {
       try {
         const { scope } = req.params;
@@ -1127,6 +1267,35 @@ class ClaudeManager {
       }
     });
 
+    this.app.post('/api/delete-slash-command', async (req, res) => {
+      try {
+        const { scope, relativePath, projectName } = req.body;
+        
+        const result = await this.commandService.deleteSlashCommand(
+          scope,
+          relativePath,
+          projectName
+        );
+        
+        if (result.success) {
+          // Broadcast command deletion to connected clients
+          this.broadcastToClients({ 
+            type: 'slashCommandDeleted', 
+            command: {
+              scope,
+              relativePath,
+              projectName,
+              path: result.commandPath
+            }
+          });
+        }
+        
+        res.json(result);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
     // Agent management endpoints
     this.app.get('/api/agents/templates', (req, res) => {
       try {
@@ -1213,6 +1382,65 @@ class ClaudeManager {
 
         res.json(result);
       } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Slash Command Management API Endpoints
+    
+    // Create slash command
+    this.app.post('/api/create-slash-command', async (req, res) => {
+      try {
+        const { commandName, instructions, scope, category, projectName } = req.body;
+        
+        if (!commandName || !instructions || !scope) {
+          return res.status(400).json({ error: 'Command name, instructions, and scope are required' });
+        }
+
+        const result = await this.commandService.createSlashCommand(
+          commandName,
+          instructions,
+          scope,
+          category,
+          projectName
+        );
+
+        if (result.success) {
+          // Log successful creation
+          console.log(`Successfully created slash command: ${result.relativePath}`);
+        }
+
+        res.json(result);
+      } catch (error) {
+        console.error('Error creating slash command:', error);
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // List slash commands
+    this.app.get('/api/slash-commands/:scope', async (req, res) => {
+      try {
+        const { scope } = req.params;
+        const { projectName } = req.query;
+
+        const commands = await this.commandService.listExistingCommands(scope, projectName);
+        res.json({ commands });
+      } catch (error) {
+        console.error('Error listing slash commands:', error);
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Delete slash command
+    this.app.delete('/api/slash-commands/:scope/:relativePath(*)', async (req, res) => {
+      try {
+        const { scope, relativePath } = req.params;
+        const { projectName } = req.query;
+
+        const result = await this.commandService.deleteSlashCommand(scope, relativePath, projectName);
+        res.json(result);
+      } catch (error) {
+        console.error('Error deleting slash command:', error);
         res.status(500).json({ error: error.message });
       }
     });
@@ -1456,12 +1684,137 @@ class ClaudeManager {
           return res.status(400).json({ error: 'Template name is required' });
         }
 
+        // Provide static templates as fallback to avoid AI generation issues
+        const staticTemplates = {
+          'tts-notification': {
+            success: true,
+            code: `// TTS Notification Hook
+try {
+  // Get the notification message from the event context
+  const message = hookEvent.context?.message || 
+                 hookEvent.context?.notification || 
+                 'Notification received';
+  
+  // Speak the notification using TTS
+  await utils.speak(message)
+    .then(result => console.log('Notification spoken:', result))
+    .catch(err => console.log('TTS failed:', err));
+  
+  console.log('TTS Notification processed:', message);
+  return 'Notification spoken: ' + message;
+} catch (error) {
+  console.error('TTS Notification hook error:', error);
+  return 'TTS Notification failed: ' + error.message;
+}`,
+            metadata: {
+              generatedAt: Date.now(),
+              eventType: 'Notification',
+              pattern: '*',
+              description: 'Speak all notifications using text-to-speech',
+              scope: customization?.scope || 'user',
+              source: 'static_template'
+            }
+          },
+          'completion-sound': {
+            success: true,
+            code: `// Completion Sound Hook
+try {
+  // Get project name if available
+  const projectName = projectInfo?.name || 'current project';
+  
+  // Play success sound
+  await utils.playSound('success')
+    .then(result => console.log('Success sound played:', result))
+    .catch(err => console.log('Sound playback failed:', err));
+  
+  console.log('Completion sound played for:', projectName);
+  return 'Completion sound played for ' + projectName;
+} catch (error) {
+  console.error('Completion sound hook error:', error);
+  return 'Completion sound failed: ' + error.message;
+}`,
+            metadata: {
+              generatedAt: Date.now(),
+              eventType: 'Stop',
+              pattern: '*',
+              description: 'Play success sound when tasks complete',
+              scope: customization?.scope || 'user',
+              source: 'static_template'
+            }
+          },
+          'file-backup': {
+            success: true,
+            code: `// File Backup Hook
+try {
+  // Only run for Write/Edit operations
+  if (hookEvent.toolName === 'Write' || hookEvent.toolName === 'Edit' || hookEvent.toolName === 'MultiEdit') {
+    const filePaths = hookEvent.filePaths || [];
+    
+    if (filePaths.length > 0) {
+      await utils.notify('Creating backups for ' + filePaths.length + ' files', 'info');
+      console.log('Backup needed for files:', filePaths);
+    }
+  }
+  
+  return 'File backup check completed';
+} catch (error) {
+  console.error('File backup hook error:', error);
+  return 'File backup failed: ' + error.message;
+}`,
+            metadata: {
+              generatedAt: Date.now(),
+              eventType: 'PreToolUse',
+              pattern: 'Write|Edit',
+              description: 'Create backups before file modifications',
+              scope: customization?.scope || 'user',
+              source: 'static_template'
+            }
+          },
+          'ollama-summary': {
+            success: true,
+            code: `// AI Summary Hook
+try {
+  // Only summarize significant operations
+  if (hookEvent.toolName && hookEvent.filePaths && hookEvent.filePaths.length > 0) {
+    const summary = await utils.askOllama(
+      'Briefly summarize this operation: ' + hookEvent.toolName + ' on files: ' + hookEvent.filePaths.join(', '),
+      { model: 'llama3.2', max_tokens: 100 }
+    );
+    
+    console.log('AI Summary generated:', summary);
+    await utils.notify('Operation summary: ' + summary, 'info');
+    return 'AI summary: ' + summary;
+  }
+  
+  return 'No summary needed for this operation';
+} catch (error) {
+  console.error('AI summary hook error:', error);
+  return 'AI summary failed: ' + error.message;
+}`,
+            metadata: {
+              generatedAt: Date.now(),
+              eventType: 'PostToolUse',
+              pattern: '*',
+              description: 'Generate AI summary of completed operations using Ollama',
+              scope: customization?.scope || 'user',
+              source: 'static_template'
+            }
+          }
+        };
+        
+        // Return static template if available
+        if (staticTemplates[template]) {
+          return res.json(staticTemplates[template]);
+        }
+
+        // Fallback to AI generation if no static template
         const result = await this.hookGenerator.generateTemplateHook(template, customization);
         res.json(result);
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
     });
+
 
     // No catch-all handler - backend serves ONLY API endpoints
     // All other requests should return 404
@@ -1495,6 +1848,12 @@ class ClaudeManager {
     // Stop services
     await this.sessionService.shutdown();
     this.fileWatcher.closeAllWatchers();
+    
+    // Clear periodic sync interval
+    if (this.mcpSyncInterval) {
+      clearInterval(this.mcpSyncInterval);
+      console.log('Periodic MCP sync stopped');
+    }
     
     // Close WebSocket server
     if (this.wss) {

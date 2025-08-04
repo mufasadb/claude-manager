@@ -7,9 +7,10 @@ const { promisify } = require('util');
 const execAsync = promisify(exec);
 
 class MCPService {
-  constructor() {
+  constructor(claudeConfigReader = null) {
     this.registryPath = path.join(os.homedir(), '.claude-manager');
     this.mcpConfigFile = path.join(this.registryPath, 'mcp-config.json');
+    this.claudeConfigReader = claudeConfigReader;
     
     // Initialize state
     this.state = {
@@ -111,14 +112,21 @@ class MCPService {
         envVars: [],
         args: []
       },
-      'meta-agent': {
-        name: 'Meta-Agent',
-        description: 'Generate effective agent system messages based on proven patterns from Anthropic and community best practices',
-        command: 'node',
+      'jira': {
+        name: 'Jira',
+        description: 'Atlassian Jira issue tracking and project management',
+        command: 'docker',
         transport: 'stdio',
-        envVars: [],
-        args: [path.join(__dirname, 'meta-agent-mcp-server.js')]
-      }
+        envVars: [
+          { key: 'JIRA_URL', description: 'Jira instance URL (e.g., https://your-company.atlassian.net)', required: true },
+          { key: 'JIRA_USERNAME', description: 'Jira username (email)', required: true },
+          { key: 'JIRA_API_TOKEN', description: 'Jira API token (generate from Account Settings)', required: true }
+        ],
+        args: [
+          'run', '-i', '--rm',
+          'ghcr.io/sooperset/mcp-atlassian:latest'
+        ]
+      },
     };
   }
 
@@ -154,6 +162,63 @@ class MCPService {
       console.error('Error saving MCP config:', error);
       throw error;
     }
+  }
+
+  // Validation and Sync Methods
+  async syncWithClaudeConfig() {
+    if (!this.claudeConfigReader) {
+      console.warn('ClaudeConfigReader not available for sync');
+      return { success: false, reason: 'No config reader available' };
+    }
+
+    try {
+      console.log('Syncing MCP state with Claude CLI configuration...');
+      const syncResult = await this.claudeConfigReader.syncWithClaudeManagerConfig();
+      
+      // Reload our state after sync
+      await this.loadMCPConfig();
+      
+      return syncResult;
+    } catch (error) {
+      console.error('Error syncing with Claude config:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async validateMCPExists(name, scope = 'user') {
+    if (!this.claudeConfigReader) {
+      // Fallback: check internal state only
+      const mcpData = scope === 'user' ? this.state.userMCPs : this.state.projectMCPs;
+      return !!mcpData.active[name] && !mcpData.active[name].missing;
+    }
+
+    try {
+      const actualMCPs = await this.claudeConfigReader.parseMCPConfig();
+      return !!actualMCPs.mcps[name];
+    } catch (error) {
+      console.error('Error validating MCP existence:', error);
+      return false;
+    }
+  }
+
+  async validateAndSyncIfNeeded(name, scope, operation) {
+    // Check if MCP exists in Claude CLI before operation
+    const exists = await this.validateMCPExists(name, scope);
+    
+    if (!exists && (operation === 'disable' || operation === 'enable')) {
+      // Try to sync and check again
+      console.log(`MCP ${name} not found in Claude CLI, attempting sync...`);
+      const syncResult = await this.syncWithClaudeConfig();
+      
+      if (syncResult.success) {
+        const existsAfterSync = await this.validateMCPExists(name, scope);
+        if (!existsAfterSync) {
+          throw new Error(`MCP '${name}' does not exist in Claude CLI. It may have been manually removed or be stale. Please refresh and try again.`);
+        }
+      }
+    }
+    
+    return exists;
   }
 
   // MCP Management
@@ -237,6 +302,15 @@ class MCPService {
 
   async disableMCP(scope, name, projectPath) {
     try {
+      // Validate MCP exists before attempting to disable
+      await this.validateAndSyncIfNeeded(name, scope, 'disable');
+
+      // Check if MCP is in our active state
+      const mcpData = scope === 'user' ? this.state.userMCPs.active[name] : this.state.projectMCPs.active[name];
+      if (!mcpData) {
+        throw new Error(`MCP '${name}' is not in active state. It may already be disabled or doesn't exist.`);
+      }
+
       // Remove from Claude but keep in our disabled storage
       const cliCommand = this.buildClaudeCommand('remove', {
         name,
@@ -248,13 +322,10 @@ class MCPService {
       });
 
       // Move from active to disabled
-      let mcpData;
       if (scope === 'user') {
-        mcpData = this.state.userMCPs.active[name];
         delete this.state.userMCPs.active[name];
         this.state.userMCPs.disabled[name] = { ...mcpData, disabledAt: Date.now() };
       } else {
-        mcpData = this.state.projectMCPs.active[name];
         delete this.state.projectMCPs.active[name];
         this.state.projectMCPs.disabled[name] = { ...mcpData, disabledAt: Date.now() };
       }
@@ -269,6 +340,7 @@ class MCPService {
 
   async enableMCP(scope, name, projectPath) {
     try {
+      // Check if MCP is in our disabled state
       let mcpData;
       if (scope === 'user') {
         mcpData = this.state.userMCPs.disabled[name];
@@ -277,23 +349,29 @@ class MCPService {
       }
 
       if (!mcpData) {
-        throw new Error('MCP not found in disabled storage');
+        throw new Error(`MCP '${name}' is not in disabled state. It may already be enabled or doesn't exist.`);
       }
 
-      // Re-add to Claude
-      const cliCommand = this.buildClaudeCommand('add', {
-        name: mcpData.name,
-        command: mcpData.command,
-        transport: mcpData.transport,
-        envVars: mcpData.envVars,
-        args: mcpData.args,
-        scope: scope === 'user' ? 'user' : 'project',
-        projectPath
-      });
+      // Check if MCP already exists in Claude CLI (shouldn't, but let's be safe)
+      const alreadyExists = await this.validateMCPExists(name, scope);
+      if (alreadyExists) {
+        console.log(`MCP '${name}' already exists in Claude CLI, moving to active state without re-adding`);
+      } else {
+        // Re-add to Claude
+        const cliCommand = this.buildClaudeCommand('add', {
+          name: mcpData.name,
+          command: mcpData.command,
+          transport: mcpData.transport,
+          envVars: mcpData.envVars,
+          args: mcpData.args,
+          scope: scope === 'user' ? 'user' : 'project',
+          projectPath
+        });
 
-      await execAsync(cliCommand, {
-        cwd: projectPath || process.cwd()
-      });
+        await execAsync(cliCommand, {
+          cwd: projectPath || process.cwd()
+        });
+      }
 
       // Move from disabled to active
       if (scope === 'user') {
@@ -343,7 +421,21 @@ class MCPService {
       if (transport === 'stdio' || !transport) {
         cmd += ` -- ${command}`;
         if (args && args.length > 0) {
-          cmd += ` ${args.join(' ')}`;
+          // For Docker commands, inject environment variable flags
+          if (command === 'docker' && envVars && Object.keys(envVars).length > 0) {
+            const dockerArgs = [...args];
+            // Insert -e flags for each env var after 'run' arguments but before image name
+            const imageIndex = dockerArgs.findIndex(arg => arg.includes('/') && arg.includes(':'));
+            if (imageIndex !== -1) {
+              // Insert env var flags before the image name
+              for (const [key] of Object.entries(envVars)) {
+                dockerArgs.splice(imageIndex, 0, '-e', key);
+              }
+            }
+            cmd += ` ${dockerArgs.join(' ')}`;
+          } else {
+            cmd += ` ${args.join(' ')}`;
+          }
         }
       } else {
         cmd += ` ${command}`;
@@ -356,7 +448,17 @@ class MCPService {
   }
 
   // List MCPs
-  async listMCPs(scope) {
+  async listMCPs(scope, autoSync = true) {
+    // Auto-sync with Claude CLI before returning state
+    if (autoSync && this.claudeConfigReader) {
+      try {
+        await this.syncWithClaudeConfig();
+      } catch (error) {
+        console.warn('Auto-sync failed during listMCPs:', error.message);
+        // Continue with cached state if sync fails
+      }
+    }
+
     if (scope === 'user') {
       return {
         active: this.state.userMCPs.active,

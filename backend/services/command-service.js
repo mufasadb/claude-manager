@@ -98,7 +98,7 @@ class CommandService {
             );
 
             if (!generationResult.success) {
-                throw new Error(generationResult.error || 'Failed to generate command content');
+                throw new Error(generationResult.error || 'Failed to generate command content with OpenRouter');
             }
 
             // Write the command file
@@ -312,6 +312,67 @@ $ARGUMENTS
         }
         
         return 'No description available';
+    }
+
+    async deleteSlashCommand(scope, relativePath, projectName = null) {
+        try {
+            if (!['user', 'project'].includes(scope)) {
+                throw new Error('Scope must be either "user" or "project"');
+            }
+
+            if (scope === 'project' && !projectName) {
+                throw new Error('Project name is required for project scope');
+            }
+
+            if (!relativePath || !relativePath.endsWith('.md')) {
+                throw new Error('Invalid command file path');
+            }
+
+            // Get target directory
+            const baseCommandsDir = this.getCommandsDirectory(scope, projectName);
+            const commandFile = path.join(baseCommandsDir, relativePath);
+
+            // Validate path security
+            if (!validatePath(commandFile, [baseCommandsDir])) {
+                throw new Error('Invalid command file path');
+            }
+
+            // Check if command file exists
+            if (!await fs.pathExists(commandFile)) {
+                throw new Error(`Command file ${relativePath} does not exist`);
+            }
+
+            // Delete the command file
+            await fs.remove(commandFile);
+
+            // Check if we need to clean up empty directories
+            const commandDir = path.dirname(commandFile);
+            if (commandDir !== baseCommandsDir) {
+                try {
+                    // Check if directory is empty and remove if so
+                    const files = await fs.readdir(commandDir);
+                    if (files.length === 0) {
+                        await fs.rmdir(commandDir);
+                    }
+                } catch (error) {
+                    // Ignore errors when cleaning up directories
+                    console.warn('Warning: Could not clean up empty directory:', error.message);
+                }
+            }
+
+            return {
+                success: true,
+                message: `Successfully deleted command: ${relativePath}`,
+                commandPath: commandFile
+            };
+
+        } catch (error) {
+            console.error('Error deleting slash command:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
     }
 }
 

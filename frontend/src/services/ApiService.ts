@@ -1,4 +1,4 @@
-import { AppState, Hook, MCPTemplate, MCPState, MCP, SessionCountdown, SessionStats, SlashCommandFormData, SlashCommandCreationResult, SlashCommand, AgentFormData, AgentCreationResult, Agent, AgentTemplate } from '../types';
+import { AppState, Hook, MCPTemplate, MCPState, SessionCountdown, SessionStats, SlashCommandFormData, SlashCommandCreationResult, SlashCommand, AgentFormData, AgentCreationResult, Agent, AgentTemplate } from '../types';
 
 const API_BASE = '';
 
@@ -337,6 +337,33 @@ export class ApiService {
     return response.json();
   }
 
+  static async setBillingDate(billingDate: number): Promise<{ success: boolean; stats: SessionStats }> {
+    const response = await fetch(`${API_BASE}/api/set-billing-date`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ billingDate }),
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  static async reprocessSessions(): Promise<{ success: boolean; message: string; stats: SessionStats }> {
+    const response = await fetch(`${API_BASE}/api/reprocess-sessions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  }
+
   static async pushEnvToProject(
     projectName: string,
     key: string,
@@ -384,6 +411,25 @@ export class ApiService {
     }
     const data = await response.json();
     return data.commands;
+  }
+
+  static async deleteSlashCommand(
+    scope: 'user' | 'project',
+    relativePath: string,
+    projectName?: string
+  ): Promise<{ success: boolean; error?: string; message?: string }> {
+    const response = await fetch(`${API_BASE}/api/delete-slash-command`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ scope, relativePath, projectName }),
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+    return response.json();
   }
 
   // Agent management methods

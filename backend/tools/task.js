@@ -1,28 +1,31 @@
 /**
- * Task Tool Wrapper for Hook Generator
+ * Task Tool with Real LLM Integration for Hook Generation
  * 
- * This provides an interface for the hook generator to use the Task tool
- * to communicate with Claude Code for generating hook JavaScript code.
+ * This provides LLM-powered hook code generation using:
+ * - Primary: Ollama (local, fast, private)
+ * - Fallback: OpenRouter (cloud, reliable)
  */
+
+const OllamaService = require('../services/integrations/ollama-service');
+const OpenRouterService = require('../services/openrouter-service');
 
 class TaskTool {
   static async execute(request) {
     try {
-      // This is a placeholder for the actual Task tool integration
-      // In a real implementation, this would interface with the Claude Code Task tool
-      
       const { description, prompt, subagent_type } = request;
       
-      // For now, we'll simulate the Task tool by extracting the prompt
-      // and returning it as a JavaScript template
+      // Extract hook parameters from the comprehensive prompt
+      const hookRequest = this.parseHookRequest(prompt);
       
-      // In the actual implementation, this would:
-      // 1. Call the Claude Code Task tool with the prompt
-      // 2. Parse the response to extract JavaScript code
-      // 3. Return the generated code
+      console.log('Generating hook code with LLM integration...');
+      console.log('Hook request:', {
+        eventType: hookRequest.eventType,
+        description: hookRequest.description,
+        scope: hookRequest.scope
+      });
       
-      // TEMPORARY: Return a basic hook template based on the prompt analysis
-      const result = this.generateTemporaryHookCode(prompt);
+      // Try to generate with real LLM services
+      const result = await this.generateWithLLMFallback(hookRequest);
       
       return result;
       
@@ -32,166 +35,236 @@ class TaskTool {
     }
   }
 
-  // Temporary method to generate basic hook code until we integrate with actual Task tool
-  static generateTemporaryHookCode(prompt) {
-    // Extract key information from the prompt
-    const eventTypeMatch = prompt.match(/Hook Type: (\w+)/);
-    const descriptionMatch = prompt.match(/User Description: ([^\n]+)/);
+  // Generate hook code with LLM fallback system
+  static async generateWithLLMFallback(hookRequest) {
+    let result = null;
     
-    const eventType = eventTypeMatch ? eventTypeMatch[1] : 'Notification';
-    const userDescription = descriptionMatch ? descriptionMatch[1] : 'Custom hook';
-    
-    // Generate appropriate hook code based on event type and description
-    let hookCode = '';
-    
-    if (eventType === 'PreToolUse') {
-      if (userDescription.toLowerCase().includes('backup')) {
-        hookCode = `// Pre-tool backup hook
-if (hookEvent.toolName === 'Write' || hookEvent.toolName === 'Edit') {
-  console.log('Creating backup before modifying files:', hookEvent.filePaths);
-  
-  for (const filePath of hookEvent.filePaths) {
+    // Try Ollama first (local, fast, private)
     try {
-      const backupPath = filePath + '.backup.' + Date.now();
-      console.log('Backup would be created at:', backupPath);
-      await utils.notify('Backup created for ' + filePath, 'info');
+      console.log('Attempting hook generation with Ollama...');
+      const ollamaService = new OllamaService();
+      
+      // Check if Ollama is available
+      const healthCheck = await ollamaService.healthCheck();
+      if (healthCheck.available) {
+        result = await ollamaService.generateHookCode(hookRequest);
+        
+        if (result.success) {
+          console.log('✅ Hook generated successfully with Ollama');
+          return result.code;
+        } else {
+          console.log('⚠️ Ollama generation failed:', result.error);
+        }
+      } else {
+        console.log('⚠️ Ollama service not available:', healthCheck.error);
+      }
     } catch (error) {
-      console.error('Backup failed for', filePath, error);
-    }
-  }
-}
-
-return 'Pre-tool backup completed';`;
-      } else {
-        hookCode = `// Pre-tool validation hook
-console.log('About to execute tool:', hookEvent.toolName);
-console.log('Files to be affected:', hookEvent.filePaths);
-
-if (hookEvent.toolName) {
-  await utils.notify('Starting ' + hookEvent.toolName, 'info');
-}
-
-return 'Pre-tool validation completed';`;
-      }
-    } else if (eventType === 'PostToolUse') {
-      if (userDescription.toLowerCase().includes('ollama') || userDescription.toLowerCase().includes('summary')) {
-        hookCode = `// Post-tool AI summary hook
-console.log('Tool completed:', hookEvent.toolName);
-
-if (hookEvent.filePaths && hookEvent.filePaths.length > 0) {
-  const summary = await utils.askOllama(
-    'Briefly summarize what was accomplished: Tool "' + hookEvent.toolName + '" was used on files: ' + hookEvent.filePaths.join(', '),
-    { model: 'llama3.2', max_tokens: 100 }
-  );
-  
-  console.log('AI Summary:', summary);
-  await utils.speak(summary);
-  
-  return 'AI summary: ' + summary;
-}
-
-return 'Post-tool processing completed';`;
-      } else {
-        hookCode = `// Post-tool completion hook
-console.log('Tool execution completed:', hookEvent.toolName);
-
-if (hookEvent.filePaths && hookEvent.filePaths.length > 0) {
-  await utils.notify('Completed ' + hookEvent.toolName + ' on ' + hookEvent.filePaths.length + ' files', 'success');
-}
-
-return 'Post-tool processing completed';`;
-      }
-    } else if (eventType === 'Notification') {
-      if (userDescription.toLowerCase().includes('speak') || userDescription.toLowerCase().includes('tts')) {
-        hookCode = `// TTS notification hook
-const message = hookEvent.context?.message || 'Notification received';
-
-console.log('Speaking notification:', message);
-await utils.speak(message);
-
-return 'Notification spoken: ' + message;`;
-      } else {
-        hookCode = `// Notification processing hook
-const message = hookEvent.context?.message || 'Notification received';
-
-console.log('Processing notification:', message);
-await utils.notify(message, 'info');
-
-return 'Notification processed: ' + message;`;
-      }
-    } else if (eventType === 'Stop') {
-      if (userDescription.toLowerCase().includes('sound') || userDescription.toLowerCase().includes('audio')) {
-        hookCode = `// Task completion sound hook
-console.log('Claude task completed at:', new Date().toISOString());
-
-await utils.playSound('success');
-await utils.speak('Claude task completed successfully');
-
-if (projectInfo) {
-  console.log('Project:', projectInfo.name);
-}
-
-return 'Task completion notification sent';`;
-      } else {
-        hookCode = `// Task completion hook
-console.log('Claude task completed at:', new Date().toISOString());
-
-await utils.notify('Claude task completed', 'success');
-
-if (projectInfo) {
-  console.log('Completed in project:', projectInfo.name);
-}
-
-return 'Task completion processed';`;
-      }
-    } else if (eventType === 'SubagentStop') {
-      hookCode = `// Subagent completion hook
-console.log('Subagent task completed at:', new Date().toISOString());
-
-await utils.playSound('success');
-await utils.notify('Subagent task completed', 'success');
-
-return 'Subagent completion processed';`;
-    } else {
-      // Generic hook template
-      hookCode = `// Generic hook for ${eventType}
-console.log('Hook triggered:', hookEvent.type);
-console.log('Event data:', JSON.stringify(hookEvent, null, 2));
-
-if (hookEvent.toolName) {
-  await utils.notify('Hook processed for ' + hookEvent.toolName, 'info');
-}
-
-return 'Hook executed successfully';`;
+      console.log('⚠️ Ollama generation error:', error.message);
     }
     
-    return hookCode;
+    // Fallback to OpenRouter (cloud, reliable)
+    try {
+      console.log('Falling back to OpenRouter for hook generation...');
+      const openRouterService = new OpenRouterService();
+      
+      result = await openRouterService.generateHookCode(hookRequest);
+      
+      if (result.success) {
+        console.log('✅ Hook generated successfully with OpenRouter');
+        return result.code;
+      } else {
+        console.log('⚠️ OpenRouter generation failed:', result.error);
+        // Use fallback code if available
+        if (result.fallbackCode) {
+          console.log('📝 Using fallback template code');
+          return result.fallbackCode;
+        }
+      }
+    } catch (error) {
+      console.log('⚠️ OpenRouter generation error:', error.message);
+    }
+    
+    // Final fallback - generate basic template
+    console.log('🔄 Using final fallback template generation');
+    return this.generateBasicTemplate(hookRequest);
   }
 
-  // Method to integrate with actual Claude Code Task tool
-  static async callClaudeCodeTask(prompt) {
-    // This will be implemented when we integrate with the actual Claude Code Task tool
-    // For now, it's a placeholder
+  // Parse hook request from the comprehensive prompt
+  static parseHookRequest(prompt) {
+    // Extract information from the HookGenerator prompt format
+    const eventTypeMatch = prompt.match(/Hook Type: (\w+)/);
+    const patternMatch = prompt.match(/Event Pattern: ([^\n]+)/);
+    const scopeMatch = prompt.match(/Scope: (\w+)/);
+    const descriptionMatch = prompt.match(/User Description: ([^\n]+)/);
+    const projectInfoMatch = prompt.match(/PROJECT CONTEXT:\s*Project: ([^\n]+) at ([^\n]+)/);
+    const ollamaMatch = prompt.match(/Ollama LLM API: ([^\n]+)/);
+    const ttsMatch = prompt.match(/TTS Service: ([^\n]+)/);
     
-    // The actual implementation would:
-    // 1. Format the request for the Claude Code Task tool
-    // 2. Send the request via the appropriate interface (API, CLI, etc.)
-    // 3. Parse the response to extract the generated JavaScript code
-    // 4. Validate the code before returning
+    const hookRequest = {
+      eventType: eventTypeMatch ? eventTypeMatch[1] : 'Notification',
+      pattern: patternMatch ? patternMatch[1] : '*',
+      scope: scopeMatch ? scopeMatch[1] : 'user',
+      description: descriptionMatch ? descriptionMatch[1] : 'Custom hook',
+      projectInfo: null,
+      userEnv: {},
+      availableServices: {
+        ollama: ollamaMatch ? ollamaMatch[1] : 'http://100.83.40.11:11434',
+        tts: ttsMatch ? ttsMatch[1] : 'http://100.83.40.11:8080'
+      }
+    };
     
-    throw new Error('Claude Code Task integration not yet implemented');
+    // Parse project info if available
+    if (projectInfoMatch) {
+      hookRequest.projectInfo = {
+        name: projectInfoMatch[1],
+        path: projectInfoMatch[2],
+        config: {}
+      };
+    }
+    
+    return hookRequest;
   }
 
-  // Validate that the tool is available
+  // Generate basic template as final fallback
+  static generateBasicTemplate(hookRequest) {
+    const { eventType, description } = hookRequest;
+    
+    const templates = {
+      'PreToolUse': `// Pre-tool hook: ${description}
+try {
+  console.log('Pre-tool event triggered:', hookEvent.toolName);
+  
+  if (hookEvent.toolName === 'Write' || hookEvent.toolName === 'Edit') {
+    console.log('Files to be modified:', hookEvent.filePaths);
+    await utils.notify('About to modify files: ' + hookEvent.filePaths.join(', '), 'info');
+  }
+  
+  return 'Pre-tool validation completed';
+} catch (error) {
+  console.error('Pre-tool hook error:', error);
+  return 'Pre-tool hook failed: ' + error.message;
+}`,
+
+      'PostToolUse': `// Post-tool hook: ${description}
+try {
+  console.log('Post-tool event triggered:', hookEvent.toolName);
+  
+  if (hookEvent.filePaths && hookEvent.filePaths.length > 0) {
+    console.log('Files modified:', hookEvent.filePaths);
+    await utils.notify('Completed ' + hookEvent.toolName + ' on ' + hookEvent.filePaths.length + ' files', 'success');
+    
+    // Optional: Use Ollama for AI summary
+    if (hookEvent.toolName === 'Write' || hookEvent.toolName === 'Edit') {
+      try {
+        const summary = await utils.askOllama(
+          'Briefly describe what was accomplished: ' + hookEvent.toolName + ' was used on files: ' + hookEvent.filePaths.join(', '),
+          { model: 'llama3.2', max_tokens: 100 }
+        );
+        console.log('AI Summary:', summary);
+      } catch (aiError) {
+        console.log('AI summary failed:', aiError.message);
+      }
+    }
+  }
+  
+  return 'Post-tool processing completed';
+} catch (error) {
+  console.error('Post-tool hook error:', error);
+  return 'Post-tool hook failed: ' + error.message;
+}`,
+
+      'Notification': `// Notification hook: ${description}
+try {
+  const message = hookEvent.context?.message || 'Notification received';
+  console.log('Notification received:', message);
+  
+  // Process the notification
+  await utils.notify(message, 'info');
+  
+  // Optional: Speak the notification if it contains important keywords
+  if (message.toLowerCase().includes('error') || message.toLowerCase().includes('complete')) {
+    await utils.speak(message);
+  }
+  
+  return 'Notification processed: ' + message;
+} catch (error) {
+  console.error('Notification hook error:', error);
+  return 'Notification hook failed: ' + error.message;
+}`,
+
+      'Stop': `// Task completion hook: ${description}
+try {
+  console.log('Claude task completed at:', new Date().toISOString());
+  
+  // Provide completion feedback
+  await utils.playSound('success');
+  await utils.speak('Claude task completed successfully');
+  
+  if (projectInfo) {
+    console.log('Task completed in project:', projectInfo.name);
+    await utils.notify('Claude task completed in ' + projectInfo.name, 'success');
+  } else {
+    await utils.notify('Claude task completed', 'success');
+  }
+  
+  return 'Task completion notification sent';
+} catch (error) {
+  console.error('Task completion hook error:', error);
+  return 'Task completion hook failed: ' + error.message;
+}`,
+
+      'SubagentStop': `// Subagent completion hook: ${description}
+try {
+  console.log('Subagent task completed at:', new Date().toISOString());
+  
+  await utils.playSound('success');
+  await utils.notify('Subagent task completed', 'success');
+  
+  return 'Subagent completion processed';
+} catch (error) {
+  console.error('Subagent completion hook error:', error);
+  return 'Subagent completion hook failed: ' + error.message;
+}`
+    };
+    
+    return templates[eventType] || `// Generic hook: ${description}
+try {
+  console.log('Hook triggered:', hookEvent.type);
+  console.log('Event data:', JSON.stringify(hookEvent, null, 2));
+  
+  if (hookEvent.toolName) {
+    await utils.notify('Hook processed for ' + hookEvent.toolName, 'info');
+  }
+  
+  return 'Hook executed successfully';
+} catch (error) {
+  console.error('Hook execution error:', error);
+  return 'Hook failed: ' + error.message;
+}`;
+  }
+
+  // Validate that LLM services are available
   static async isAvailable() {
     try {
-      // Check if the Claude Code Task tool is available
-      // This could involve checking for CLI availability, API endpoints, etc.
+      // Check Ollama availability
+      const ollamaService = new OllamaService();
+      const ollamaHealth = await ollamaService.healthCheck();
       
-      // For now, return true to allow development to continue
+      if (ollamaHealth.available) {
+        return true;
+      }
+      
+      // Check OpenRouter availability
+      const openRouterService = new OpenRouterService();
+      if (process.env.OPENROUTER_API_KEY) {
+        return true;
+      }
+      
+      // At least fallback templates are always available
       return true;
     } catch (error) {
-      return false;
+      // Fallback templates are always available
+      return true;
     }
   }
 
@@ -199,9 +272,10 @@ return 'Hook executed successfully';`;
   static getInfo() {
     return {
       name: 'Task',
-      description: 'Interface to Claude Code Task tool for hook generation',
-      version: '1.0.0',
-      available: true // Will be dynamically checked in real implementation
+      description: 'LLM-powered hook code generation with Ollama and OpenRouter fallback',
+      version: '2.0.0',
+      providers: ['ollama', 'openrouter', 'templates'],
+      available: true
     };
   }
 }

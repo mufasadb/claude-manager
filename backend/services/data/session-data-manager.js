@@ -106,14 +106,12 @@ class SessionDataManager {
       sessionHistory: this.state.sessionHistory || [],
       timeRemaining: null,
       planLimits: {
-        pro: 45,
-        'max-5x': 225,
-        'max-20x': 900
+        max: 50
       },
       estimatedCosts: {
-        pro: { monthly: 20, perSession: 20 / 45 },
-        'max-5x': { monthly: 100, perSession: 100 / 225 },
-        'max-20x': { monthly: 400, perSession: 400 / 900 }
+        pro: { monthly: 20, perSession: 20 / 50 },
+        'max-5x': { monthly: 100, perSession: 100 / 50 },
+        'max-20x': { monthly: 400, perSession: 400 / 50 }
       }
     };
 

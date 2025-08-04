@@ -43,9 +43,23 @@ class SessionCalculator {
             } else if (data.message && data.message.role) {
               role = data.message.role;
               content = data.message.content || '';
+            } else if (data.type) {
+              // Handle cases where type is 'user' or 'assistant'
+              role = data.type === 'user' ? 'user' : data.type === 'assistant' ? 'assistant' : data.type;
+              content = data.message ? (data.message.content || '') : (data.content || '');
             } else {
               role = 'unknown';
               content = JSON.stringify(data);
+            }
+            
+            // Check if this is a tool result message (should not count as user turn)
+            if (role === 'user' && data.message && Array.isArray(data.message.content)) {
+              const hasToolResult = data.message.content.some(item => 
+                item && typeof item === 'object' && item.type === 'tool_result'
+              );
+              if (hasToolResult) {
+                role = 'tool_result'; // Mark as tool result, not user message
+              }
             }
             
             // Extract usage information if available
@@ -62,6 +76,11 @@ class SessionCalculator {
               usage,
               file: filePath
             });
+            
+            // Debug logging for token extraction
+            if (usage && (usage.input_tokens > 0 || usage.output_tokens > 0)) {
+              console.log(`Token data found: role=${role}, input=${usage.input_tokens || 0}, output=${usage.output_tokens || 0}, cache_creation=${usage.cache_creation_input_tokens || 0}, cache_read=${usage.cache_read_input_tokens || 0}`);
+            }
           } catch (parseError) {
             // Skip malformed JSON lines
             console.warn(`Skipping malformed JSON in ${filePath}:`, parseError.message);
@@ -161,15 +180,41 @@ class SessionCalculator {
           start: messageTime.getTime(),
           end: messageTime.getTime(),
           messageCount: 1,
-          tokens: message.usage ? (message.usage.input_tokens || 0) + (message.usage.output_tokens || 0) : 0,
+          userTurns: 0, // Will be calculated based on user-assistant pairs
+          userMessages: message.role === 'user' ? 1 : 0,
+          assistantMessages: message.role === 'assistant' ? 1 : 0,
+          tokens: message.usage ? 
+            (message.usage.input_tokens || 0) + 
+            (message.usage.output_tokens || 0) + 
+            (message.usage.cache_creation_input_tokens || 0) + 
+            (message.usage.cache_read_input_tokens || 0) : 0,
+          inputTokens: message.usage ? 
+            (message.usage.input_tokens || 0) + 
+            (message.usage.cache_creation_input_tokens || 0) + 
+            (message.usage.cache_read_input_tokens || 0) : 0,
+          outputTokens: message.usage ? (message.usage.output_tokens || 0) : 0,
           files: new Set([message.file])
         };
       } else {
         // Extend current session
         currentSessionData.end = messageTime.getTime();
         currentSessionData.messageCount++;
+        if (message.role === 'user') {
+          currentSessionData.userMessages++;
+        } else if (message.role === 'assistant') {
+          currentSessionData.assistantMessages++;
+        }
         if (message.usage) {
-          currentSessionData.tokens += (message.usage.input_tokens || 0) + (message.usage.output_tokens || 0);
+          currentSessionData.tokens += 
+            (message.usage.input_tokens || 0) + 
+            (message.usage.output_tokens || 0) + 
+            (message.usage.cache_creation_input_tokens || 0) + 
+            (message.usage.cache_read_input_tokens || 0);
+          currentSessionData.inputTokens += 
+            (message.usage.input_tokens || 0) + 
+            (message.usage.cache_creation_input_tokens || 0) + 
+            (message.usage.cache_read_input_tokens || 0);
+          currentSessionData.outputTokens += (message.usage.output_tokens || 0);
         }
         currentSessionData.files.add(message.file);
       }
@@ -180,8 +225,11 @@ class SessionCalculator {
       sessions.push(currentSessionData);
     }
     
-    // Convert file sets to arrays for JSON serialization
+    // Calculate user turns and convert file sets to arrays for JSON serialization
     sessions.forEach(session => {
+      // User turns = number of times the user initiated a conversation/question
+      // Each user message represents one turn where the human asked something
+      session.userTurns = session.userMessages || 0;
       session.files = Array.from(session.files);
     });
     

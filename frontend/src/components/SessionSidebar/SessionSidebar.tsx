@@ -12,6 +12,9 @@ const SessionSidebar: React.FC<SessionSidebarProps> = ({ isOpen, onClose }) => {
   const [sessionStats, setSessionStats] = useState<SessionStats | null>(null);
   const [sessionCountdown, setSessionCountdown] = useState<SessionCountdown | null>(null);
   const [loading, setLoading] = useState(true);
+  const [editingBillingDate, setEditingBillingDate] = useState(false);
+  const [newBillingDate, setNewBillingDate] = useState<number>(1);
+  const [reprocessing, setReprocessing] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -29,10 +32,36 @@ const SessionSidebar: React.FC<SessionSidebarProps> = ({ isOpen, onClose }) => {
       ]);
       setSessionStats(stats);
       setSessionCountdown(countdown);
+      if (stats && !editingBillingDate) {
+        setNewBillingDate(stats.billingDate || 1);
+      }
       setLoading(false);
     } catch (error) {
       console.error('Failed to fetch session data:', error);
       setLoading(false);
+    }
+  };
+
+  const handleBillingDateSave = async () => {
+    try {
+      await ApiService.setBillingDate(newBillingDate);
+      setEditingBillingDate(false);
+      await fetchSessionData(); // Refresh data
+    } catch (error) {
+      console.error('Failed to update billing date:', error);
+    }
+  };
+
+  const handleReprocessSessions = async () => {
+    setReprocessing(true);
+    try {
+      const result = await ApiService.reprocessSessions();
+      console.log(result.message);
+      await fetchSessionData(); // Refresh data to show updated token usage
+    } catch (error) {
+      console.error('Failed to reprocess sessions:', error);
+    } finally {
+      setReprocessing(false);
     }
   };
 
@@ -52,6 +81,26 @@ const SessionSidebar: React.FC<SessionSidebarProps> = ({ isOpen, onClose }) => {
       return `${Math.round(hours * 60)}m`;
     }
     return `${hours.toFixed(1)}h`;
+  };
+
+  const formatNumber = (num: number) => {
+    if (num >= 1000000000) {
+      return `${(num / 1000000000).toFixed(1)}B`;
+    } else if (num >= 1000000) {
+      return `${(num / 1000000).toFixed(1)}M`;
+    } else if (num >= 1000) {
+      return `${(num / 1000).toFixed(1)}K`;
+    }
+    return num.toLocaleString();
+  };
+
+  const formatCurrency = (num: number) => {
+    if (num >= 1000000) {
+      return `$${(num / 1000000).toFixed(1)}M`;
+    } else if (num >= 1000) {
+      return `$${(num / 1000).toFixed(1)}K`;
+    }
+    return `$${num.toFixed(2)}`;
   };
 
   const getCurrentSessionStatus = () => {
@@ -115,38 +164,95 @@ const SessionSidebar: React.FC<SessionSidebarProps> = ({ isOpen, onClose }) => {
                     <h3>Current Billing Period</h3>
                     <div className="billing-info">
                       <div className="billing-row">
+                        <span>Billing Date:</span>
+                        {editingBillingDate ? (
+                          <div className="billing-date-editor">
+                            <input 
+                              type="number" 
+                              min="1" 
+                              max="31" 
+                              value={newBillingDate}
+                              onChange={(e) => setNewBillingDate(parseInt(e.target.value) || 1)}
+                              className="billing-date-input"
+                            />
+                            <button onClick={handleBillingDateSave} className="save-button">Save</button>
+                            <button onClick={() => setEditingBillingDate(false)} className="cancel-button">Cancel</button>
+                          </div>
+                        ) : (
+                          <span onClick={() => setEditingBillingDate(true)} className="editable-billing-date">
+                            {sessionStats.billingDate}th of each month (click to edit)
+                          </span>
+                        )}
+                      </div>
+                      <div className="billing-row">
                         <span>Period:</span>
-                        <span>{formatDate(sessionStats.currentPeriodStart)} - {formatDate(new Date().toISOString())}</span>
+                        <span>{formatDate(sessionStats.currentPeriodStart)} - {formatDate(sessionStats.nextPeriodStart)}</span>
                       </div>
                       <div className="billing-row">
                         <span>Sessions Used:</span>
-                        <span className="sessions-count">{sessionStats.monthlySessions}</span>
+                        <span className="sessions-count">{sessionStats.monthlySessions} / 50</span>
                       </div>
                       <div className="billing-row">
-                        <span>Plan Limits:</span>
-                        <div className="plan-limits">
-                          <div>Pro: {sessionStats.planLimits.pro}</div>
-                          <div>Max-5x: {sessionStats.planLimits.maxFive}</div>
-                          <div>Max-20x: {sessionStats.planLimits.maxTwenty}</div>
-                        </div>
+                        <span>Tokens Used:</span>
+                        <span className="token-count">{formatNumber(sessionStats.periodTotals.tokens)}</span>
+                      </div>
+                      <div className="billing-row">
+                        <span>User Turns:</span>
+                        <span className="turn-count" title="Complete user question + Claude response pairs">
+                          {formatNumber(sessionStats.periodTotals.userTurns)}
+                        </span>
+                      </div>
+                      <div className="billing-row">
+                        <span>On track for:</span>
+                        <span className={`projected-sessions ${sessionStats.periodMetrics.projectedSessions > 50 ? 'over-limit' : 'under-limit'}`}>
+                          {sessionStats.periodMetrics.projectedSessions} sessions this month
+                        </span>
+                      </div>
+                      <div className="billing-row">
+                        <span>Daily target:</span>
+                        <span className="daily-target">
+                          {sessionStats.periodMetrics.sessionsPerDayNeeded} sessions/day for next {sessionStats.periodMetrics.daysRemaining} days
+                        </span>
                       </div>
                     </div>
                   </div>
 
                   {/* Session History */}
                   <div className="session-section">
-                    <h3>Recent Sessions ({sessionStats.sessionHistory.length})</h3>
+                    <div className="session-history-header">
+                      <h3>Recent Sessions ({sessionStats.sessionHistory.length})</h3>
+                      <button 
+                        onClick={handleReprocessSessions}
+                        disabled={reprocessing}
+                        className="reprocess-button"
+                        title="Re-extract token usage and user turns from JSONL files"
+                      >
+                        {reprocessing ? 'Reprocessing...' : 'Extract Tokens'}
+                      </button>
+                    </div>
                     <div className="session-history">
                       {sessionStats.sessionHistory.length === 0 ? (
                         <div className="no-sessions">No session history available</div>
                       ) : (
                         sessionStats.sessionHistory.slice(-10).reverse().map((session, index) => (
                           <div key={index} className="session-item">
-                            <div className="session-date">
-                              {formatDate(session.start)}
+                            <div className="session-header">
+                              <div className="session-date">
+                                {formatDate(session.start)}
+                              </div>
+                              <div className="session-duration">
+                                {formatDuration(session.duration)}
+                              </div>
                             </div>
-                            <div className="session-duration">
-                              {formatDuration(session.duration)}
+                            <div className="session-metrics">
+                              <div className="metric">
+                                <span className="metric-value">{formatNumber(session.tokens)}</span>
+                                <span className="metric-label">tokens</span>
+                              </div>
+                              <div className="metric">
+                                <span className="metric-value">{formatNumber(session.userTurns)}</span>
+                                <span className="metric-label">turns</span>
+                              </div>
                             </div>
                             <div className="session-period">
                               {new Date(session.start).toLocaleDateString() === new Date(session.end).toLocaleDateString() 
@@ -157,6 +263,39 @@ const SessionSidebar: React.FC<SessionSidebarProps> = ({ isOpen, onClose }) => {
                           </div>
                         ))
                       )}
+                    </div>
+                  </div>
+
+                  {/* Lifetime Statistics */}
+                  <div className="session-section">
+                    <h3>Lifetime Statistics</h3>
+                    <div className="lifetime-stats">
+                      <div className="stat-grid">
+                        <div className="stat-item">
+                          <div className="stat-value">{formatNumber(sessionStats.lifetimeStats.totalSessions)}</div>
+                          <div className="stat-label">Total Sessions</div>
+                        </div>
+                        <div className="stat-item">
+                          <div className="stat-value">{formatNumber(sessionStats.lifetimeStats.totalTokens)}</div>
+                          <div className="stat-label">Total Tokens</div>
+                        </div>
+                        <div className="stat-item">
+                          <div className="stat-value" title="Complete user question + Claude response pairs">
+                            {formatNumber(sessionStats.lifetimeStats.totalUserTurns)}
+                          </div>
+                          <div className="stat-label">User Turns</div>
+                        </div>
+                      </div>
+                      <div className="cost-breakdown">
+                        <div className="cost-row">
+                          <span>$ if Sonnet 4:</span>
+                          <span className="cost-value">{formatCurrency(sessionStats.lifetimeStats.costs.sonnet4)}</span>
+                        </div>
+                        <div className="cost-row">
+                          <span>$ if Opus 4:</span>
+                          <span className="cost-value">{formatCurrency(sessionStats.lifetimeStats.costs.opus4)}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </>

@@ -142,7 +142,7 @@ const HookBuilder: React.FC<HookBuilderProps> = ({
     }
   };
 
-  const handleTemplateSelect = (templateKey: string) => {
+  const handleTemplateSelect = async (templateKey: string) => {
     const template = templates[templateKey];
     if (template) {
       setHookConfig({
@@ -151,6 +151,40 @@ const HookBuilder: React.FC<HookBuilderProps> = ({
         pattern: template.pattern,
         description: template.description
       });
+
+      // Automatically generate code using the static template
+      setGenerating(true);
+      setError(null);
+
+      try {
+        const response = await fetch('/api/hooks/generate-template', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            template: templateKey,
+            customization: {
+              scope,
+              projectName: scope === 'project' ? projectName : undefined
+            }
+          }),
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          setGeneratedCode(result.code);
+          setStep('review');
+        } else {
+          setError(result.error || 'Failed to generate hook from template');
+        }
+      } catch (error) {
+        console.error('Template generation failed:', error);
+        setError('Failed to generate hook from template. Please try again.');
+      } finally {
+        setGenerating(false);
+      }
     }
   };
 

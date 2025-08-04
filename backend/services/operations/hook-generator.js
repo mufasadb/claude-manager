@@ -75,69 +75,175 @@ class HookGenerator {
 
   // Build the comprehensive prompt for Claude Code
   buildGenerationPrompt({ scope, eventType, pattern, description, projectInfo, userEnv }) {
-    return `You are creating a JavaScript hook handler for the Claude Manager hook system.
+    const ollamaUrl = userEnv.OLLAMA_SERVICE_URL || 'http://100.83.40.11:11434';
+    const ttsUrl = userEnv.TTS_SERVICE_URL || 'http://100.83.40.11:8080';
 
-HOOK REQUIREMENTS:
-- Hook Type: ${eventType}
-- Event Pattern: ${pattern}
-- Scope: ${scope}
-- User Description: ${description}
+    return `You are generating JavaScript code for Claude Code's hook system.
+
+CLAUDE CODE HOOK SYSTEM EXPLANATION:
+
+Claude Code is Anthropic's CLI tool for software development. It has a hook system that allows users to execute custom JavaScript code in response to Claude's actions.
+
+HOOK LIFECYCLE:
+1. User works with Claude Code (AI assistant)
+2. Claude uses tools like Write, Edit, Bash, Read, Grep, MultiEdit, etc.
+3. Before/after each tool use, Claude Code triggers hook events
+4. Your generated JavaScript code executes in a sandboxed Node.js VM
+5. The code can perform actions like notifications, file operations, API calls
+
+HOOK EVENT TYPES:
+- PreToolUse: Runs BEFORE Claude executes a tool (validation, backups, warnings)
+- PostToolUse: Runs AFTER Claude executes a tool (cleanup, formatting, git operations)
+- Notification: Runs when Claude sends status messages
+- Stop: Runs when Claude completes a task/conversation
+- SubagentStop: Runs when a Claude subagent completes its work
 
 EXECUTION ENVIRONMENT:
-The hook will be executed in a sandboxed Node.js VM with the following context:
+- Sandboxed Node.js VM (30-second timeout)
+- No file system write access (security)
+- Limited HTTP requests to approved domains
+- Access to local services (Ollama LLM, TTS)
 
-AVAILABLE VARIABLES:
-- hookEvent: {
-    type: '${eventType}',
-    toolName: 'string', // Name of the Claude tool that triggered this
-    filePaths: ['array', 'of', 'file', 'paths'], // Files affected by the tool
-    context: {}, // Additional context data
-    timestamp: 1234567890
+YOUR JAVASCRIPT CODE RECEIVES:
+
+hookEvent = {
+  type: '${eventType}', // The event type for this hook
+  toolName: 'Write|Edit|Bash|Read|Grep|MultiEdit|etc', // Claude tool that triggered this
+  filePaths: ['/path/to/affected/file.js'], // Files Claude is working with
+  context: { /* Tool-specific data like file content, command args */ },
+  timestamp: 1234567890
+}
+
+projectInfo = ${projectInfo ? `{
+  name: '${projectInfo.name}',           // Name of the current project
+  path: '${projectInfo.path}',          // Full project path
+  config: { /* Claude project settings */ }
+}` : 'null // null for user-level hooks'}
+
+userEnv = { /* Safe environment variables - sensitive keys filtered */ }
+
+hookMeta = {
+  id: 'hook-uuid',
+  name: 'Generated Hook',
+  scope: '${scope}'
+}
+
+utils = {
+  log(...args),                         // Console logging
+  sleep(milliseconds),                  // Async delay
+  fetch(url, options),                  // HTTP requests (restricted domains)
+  playSound('success|error|warning|info'), // System sounds
+  speak(text, options),                 // Text-to-speech via ${ttsUrl}
+  askOllama(prompt, options),           // Query Ollama LLM at ${ollamaUrl}
+  notify(message, type)                 // System notifications
+}
+
+console = {
+  log(...args),   // Logging
+  warn(...args),  // Warnings
+  error(...args)  // Errors
+}
+
+USER REQUEST:
+Hook Type: ${eventType}
+Event Pattern: ${pattern}
+Scope: ${scope}
+User Description: ${description}
+
+GENERATE JAVASCRIPT CODE THAT:
+1. Properly handles the ${eventType} event
+2. Matches files/tools using pattern: ${pattern}
+3. Implements: ${description}
+4. Uses hookEvent data appropriately
+5. Includes error handling and user feedback
+6. Uses available utilities (utils.notify, utils.speak, etc.)
+7. Returns a meaningful status message
+
+EVENT-SPECIFIC GUIDANCE:
+${this.getEventSpecificGuidance(eventType)}
+
+CODE REQUIREMENTS:
+- Must be valid JavaScript for Node.js VM
+- Use async/await for asynchronous operations  
+- Include try/catch error handling
+- No file system writes, no dangerous operations
+- Comment the code to explain the logic
+- Return a string status message
+
+EXAMPLE HOOK STRUCTURE:
+\`\`\`javascript
+// ${description}
+try {
+  // Check if this event matches our criteria
+  if (hookEvent.toolName === 'Write' || hookEvent.toolName === 'Edit') {
+    // Your logic here
+    console.log('Processing event:', hookEvent.type);
+    
+    // Use utilities
+    await utils.notify('Hook executed', 'info');
+    
+    return 'Hook completed successfully';
   }
-- projectInfo: ${projectInfo ? `{
-    name: '${projectInfo.name}',
-    path: '${projectInfo.path}',
-    config: {} // Project configuration
-  }` : 'null // No project context for user-level hooks'}
-- userEnv: {} // Filtered environment variables (sensitive keys removed)
-- hookMeta: { id: 'string', name: 'string', scope: '${scope}' }
-
-AVAILABLE SERVICES:
-- Ollama LLM API: ${userEnv.OLLAMA_SERVICE_URL || 'http://100.83.40.11:11434'}
-- TTS Service: ${userEnv.TTS_SERVICE_URL || 'http://100.83.40.11:8080'}
-
-UTILITY FUNCTIONS:
-- utils.log(...args) - Log messages
-- utils.sleep(ms) - Sleep for milliseconds
-- utils.fetch(url, options) - HTTP requests (restricted domains)
-- utils.playSound(type) - Play notification sounds ('success', 'error', 'warning', 'info')
-- utils.speak(text, options) - Text-to-speech
-- utils.askOllama(prompt, options) - Query Ollama LLM
-- utils.notify(message, type) - Send notifications
-
-CONSOLE METHODS:
-- console.log(), console.warn(), console.error()
-
-HOOK EXECUTION PATTERNS:
-
-${this.getHookPatternExamples(eventType)}
-
-SECURITY CONSTRAINTS:
-- No file system write access
-- HTTP requests limited to approved domains
-- 30-second execution timeout
-- No access to sensitive environment variables
-- Sandboxed execution environment
-
-REQUIREMENTS:
-1. Write JavaScript code that accomplishes: ${description}
-2. Use async/await for asynchronous operations
-3. Handle errors gracefully with try/catch
-4. Return a meaningful result or status message
-5. Use the available utility functions appropriately
-6. Follow the hook execution pattern for ${eventType}
+  
+  return 'Event ignored - no match';
+} catch (error) {
+  console.error('Hook failed:', error);
+  return 'Hook failed: ' + error.message;
+}
+\`\`\`
 
 Generate only the JavaScript code without markdown formatting or explanations. The code should be ready to execute in the hook system.`;
+  }
+
+  // Get event-specific guidance for prompt
+  getEventSpecificGuidance(eventType) {
+    const guidance = {
+      'PreToolUse': `
+This runs BEFORE Claude executes a tool. Use this for:
+- Validation and safety checks
+- Creating backups
+- User warnings/confirmations
+- Preprocessing
+
+You can prevent the tool from running by throwing an error.
+Access intended action via hookEvent.toolName and hookEvent.filePaths.`,
+
+      'PostToolUse': `
+This runs AFTER Claude completes a tool action. Use this for:
+- Cleanup and formatting
+- Git operations (add, commit, push)  
+- Analysis and reporting
+- Integration with external tools
+
+Files have already been modified. Use hookEvent.filePaths to see what changed.`,
+
+      'Notification': `
+This runs when Claude sends status messages. Use this for:
+- User experience improvements
+- Text-to-speech notifications
+- External integrations
+- Logging and monitoring
+
+Access message via hookEvent.context.message.`,
+
+      'Stop': `
+This runs when Claude completes a task/conversation. Use this for:
+- Task completion notifications
+- Session summaries
+- Cleanup operations
+- External reporting
+
+Perfect for "task done" feedback to users.`,
+
+      'SubagentStop': `
+This runs when a Claude subagent completes. Use this for:
+- Subagent completion feedback
+- Chain of task notifications
+- Progress tracking
+- Workflow management`
+    };
+
+    return guidance[eventType] || 'Generic hook - adapt based on your needs.';
   }
 
   // Get hook pattern examples based on event type
@@ -239,8 +345,31 @@ return 'Hook executed successfully';`;
     const warnings = [];
 
     try {
-      // Basic syntax validation
-      new Function(code);
+      // Basic syntax validation with mock context
+      // Create a mock environment with the variables that hooks expect
+      // Wrap the code in an async function to handle await statements
+      const mockContext = `
+        const hookEvent = { type: '${eventType}', toolName: 'test', filePaths: [], context: {}, timestamp: Date.now() };
+        const projectInfo = { name: 'test', path: '/test', config: {} };
+        const userEnv = {};
+        const hookMeta = { id: 'test', name: 'test', scope: 'user' };
+        const utils = {
+          log: () => {},
+          sleep: () => Promise.resolve(),
+          fetch: () => Promise.resolve({}),
+          playSound: () => Promise.resolve(),
+          speak: () => Promise.resolve(),
+          askOllama: () => Promise.resolve(),
+          notify: () => Promise.resolve()
+        };
+        const console = { log: () => {}, warn: () => {}, error: () => {} };
+        
+        // Wrap in async function to handle await statements
+        (async () => {
+          ${code}
+        })();
+      `;
+      new Function(mockContext);
     } catch (syntaxError) {
       errors.push(`Syntax error: ${syntaxError.message}`);
     }
