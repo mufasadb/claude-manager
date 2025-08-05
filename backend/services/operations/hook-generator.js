@@ -73,10 +73,12 @@ class HookGenerator {
     }
   }
 
-  // Build the comprehensive prompt for Claude Code
+  // Build the comprehensive prompt for Claude Code  
   buildGenerationPrompt({ scope, eventType, pattern, description, projectInfo, userEnv }) {
-    const ollamaUrl = userEnv.OLLAMA_SERVICE_URL || 'http://100.83.40.11:11434';
-    const ttsUrl = userEnv.TTS_SERVICE_URL || 'http://100.83.40.11:8080';
+    const { serviceConfig } = require('../../utils/service-config');
+    const serviceUrls = serviceConfig.getAllServiceUrls();
+    const ollamaUrl = userEnv.OLLAMA_SERVICE_URL || serviceUrls.ollama;
+    const ttsUrl = userEnv.TTS_SERVICE_URL || serviceUrls.tts;
 
     return `You are generating JavaScript code for Claude Code's hook system.
 

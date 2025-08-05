@@ -3,10 +3,12 @@ const fs = require('fs-extra');
 const path = require('path');
 const os = require('os');
 const { spawn } = require('child_process');
+const { serviceConfig } = require('../../utils/service-config');
 
 class TTSService {
-  constructor(baseUrl = 'http://100.83.40.11:8080') {
-    this.baseUrl = baseUrl;
+  constructor(baseUrl = null) {
+    // Use centralized service configuration with fallback
+    this.baseUrl = baseUrl || serviceConfig.getTtsUrl();
     this.client = axios.create({
       baseURL: this.baseUrl,
       timeout: 15000,

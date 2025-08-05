@@ -15,6 +15,7 @@ const ClaudeConfigReader = require('./services/claude-config-reader');
 const HookRegistry = require('./services/data/hook-registry');
 const HookEventService = require('./services/hook-event-service');
 const HookGenerator = require('./services/operations/hook-generator');
+const MCPDiscoveryService = require('./services/mcp-discovery-service');
 
 // Import configuration
 const { COMMON_HOOKS } = require('./config/hooks');
@@ -45,6 +46,7 @@ class ClaudeManager {
     this.hookRegistry = new HookRegistry();
     this.hookEventService = null; // Will be initialized after user env vars are loaded
     this.hookGenerator = null; // Will be initialized with Task agent reference
+    this.mcpDiscoveryService = new MCPDiscoveryService();
 
     // User-level state
     this.state = {
@@ -1216,6 +1218,106 @@ class ClaudeManager {
         res.json(result);
       } catch (error) {
         res.status(500).json({ error: error.message });
+      }
+    });
+
+    // MCP Discovery Endpoints
+    this.app.post('/api/mcp/discover', async (req, res) => {
+      try {
+        const { description, preferredLLM = 'openrouter' } = req.body;
+        
+        if (!description || description.trim().length === 0) {
+          return res.status(400).json({ 
+            success: false, 
+            error: 'Description is required for MCP discovery' 
+          });
+        }
+
+        console.log(`Starting MCP discovery for: "${description}" using ${preferredLLM}`);
+        
+        const result = await this.mcpDiscoveryService.discoverMCPServer(description, preferredLLM);
+        
+        res.json(result);
+      } catch (error) {
+        console.error('MCP discovery failed:', error);
+        res.status(500).json({ 
+          success: false, 
+          error: error.message 
+        });
+      }
+    });
+
+    this.app.get('/api/mcp/discovery/health', async (req, res) => {
+      try {
+        const healthStatus = await this.mcpDiscoveryService.healthCheck();
+        res.json(healthStatus);
+      } catch (error) {
+        res.status(500).json({ 
+          success: false, 
+          error: error.message 
+        });
+      }
+    });
+
+    this.app.post('/api/mcp/add-discovered', async (req, res) => {
+      try {
+        const { scope, template, projectPath } = req.body;
+        
+        if (!template || !template.template) {
+          return res.status(400).json({ 
+            success: false, 
+            error: 'Template data is required' 
+          });
+        }
+
+        // Add the discovered template to the MCP service templates
+        const templateKey = template.templateKey;
+        this.mcpService.templates[templateKey] = template.template;
+
+        // Create MCP config from template
+        const mcpConfig = {
+          name: templateKey, // Use templateKey as the MCP name (e.g., "mcp-atlassian")
+          command: template.template.command,
+          transport: template.template.transport || 'stdio',
+          args: template.template.args || [],
+          envVars: {}
+        };
+
+        // Add any required environment variables (will prompt user if missing)
+        if (template.template.envVars && template.template.envVars.length > 0) {
+          for (const envVar of template.template.envVars) {
+            if (envVar.required && !process.env[envVar.key]) {
+              // Return template for user to configure environment variables
+              return res.json({
+                success: true,
+                requiresEnvVars: true,
+                template: template.template,
+                templateKey: templateKey,
+                message: 'Template added but requires environment variables'
+              });
+            } else if (process.env[envVar.key]) {
+              mcpConfig.envVars[envVar.key] = process.env[envVar.key];
+            }
+          }
+        }
+
+        const result = await this.mcpService.addMCP(scope, { ...mcpConfig, projectPath });
+        
+        // Update state and broadcast
+        this.state.mcps = this.mcpService.getState();
+        this.broadcastToClients({ type: 'mcpUpdate', mcps: this.state.mcps });
+        
+        res.json({
+          success: true,
+          data: result,
+          templateAdded: templateKey
+        });
+      } catch (error) {
+        console.error('Failed to add discovered MCP:', error);
+        res.status(500).json({ 
+          success: false, 
+          error: error.message 
+        });
       }
     });
 

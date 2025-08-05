@@ -321,6 +321,52 @@ export class ApiService {
     return response.json();
   }
 
+  // MCP Discovery Methods
+  static async discoverMCP(
+    description: string,
+    preferredLLM: 'openrouter' | 'ollama' = 'openrouter'
+  ): Promise<any> {
+    const response = await fetch(`${API_BASE}/api/mcp/discover`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ description, preferredLLM }),
+    });
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  static async addDiscoveredMCP(
+    scope: 'user' | 'project',
+    template: any,
+    projectPath?: string
+  ): Promise<any> {
+    const response = await fetch(`${API_BASE}/api/mcp/add-discovered`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ scope, template, projectPath }),
+    });
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  static async getMCPDiscoveryHealth(): Promise<any> {
+    const response = await fetch(`${API_BASE}/api/mcp/discovery/health`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  }
+
   static async getSessionCountdown(): Promise<SessionCountdown> {
     const response = await fetch(`${API_BASE}/api/countdown`);
     if (!response.ok) {

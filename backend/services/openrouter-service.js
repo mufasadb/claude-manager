@@ -1,12 +1,87 @@
-const OpenAI = require('openai');
+const axios = require('axios');
 
 class OpenRouterService {
     constructor() {
-        this.client = new OpenAI({
-            baseURL: "https://openrouter.ai/api/v1",
-            apiKey: process.env.OPENROUTER_API_KEY,
+        this.baseUrl = "https://openrouter.ai/api/v1";
+        this.model = "anthropic/claude-3-haiku";
+        this.maxRetries = 3;
+        this.retryDelay = 2000; // ms
+        this.rateLimitDelay = 1000; // ms between requests
+        this.lastRequestTime = 0;
+        
+        // Create axios client with better configuration
+        this.client = axios.create({
+            baseURL: this.baseUrl,
+            timeout: 60000,
+            headers: {
+                'Content-Type': 'application/json',
+                'HTTP-Referer': 'https://claude-manager.dev',
+                'X-Title': 'Claude Manager'
+            }
         });
-        this.model = "google/gemini-flash-1.5";
+
+        // Add response interceptor for better error handling
+        this.client.interceptors.response.use(
+            response => response,
+            error => this.handleAxiosError(error)
+        );
+    }
+
+    // Enhanced error handling for OpenRouter API errors
+    handleAxiosError(error) {
+        if (error.response?.status === 401) {
+            throw new Error('Invalid OpenRouter API key. Please check your OPENROUTER_API_KEY environment variable.');
+        } else if (error.response?.status === 429) {
+            throw new Error('OpenRouter rate limit exceeded. Please wait before making more requests.');
+        } else if (error.response?.status === 402) {
+            throw new Error('OpenRouter credits exhausted. Please add credits to your account.');
+        } else if (error.response?.status === 503) {
+            throw new Error('OpenRouter service temporarily unavailable. Please try again later.');
+        } else if (error.code === 'ENOTFOUND') {
+            throw new Error('Cannot connect to OpenRouter. Please check your internet connection.');
+        } else if (error.code === 'ETIMEDOUT') {
+            throw new Error('OpenRouter request timed out. The service may be overloaded.');
+        }
+        throw error;
+    }
+
+    // Retry logic with exponential backoff
+    async withRetry(operation, context = '') {
+        let lastError;
+        
+        for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+            try {
+                // Rate limiting
+                const now = Date.now();
+                const timeSinceLastRequest = now - this.lastRequestTime;
+                if (timeSinceLastRequest < this.rateLimitDelay) {
+                    await new Promise(resolve => 
+                        setTimeout(resolve, this.rateLimitDelay - timeSinceLastRequest)
+                    );
+                }
+                this.lastRequestTime = Date.now();
+
+                return await operation();
+            } catch (error) {
+                lastError = error;
+                
+                // Don't retry on certain errors
+                if (error.message.includes('Invalid') || 
+                    error.message.includes('credits exhausted') ||
+                    error.response?.status === 401 || 
+                    error.response?.status === 402) {
+                    throw error;
+                }
+                
+                if (attempt < this.maxRetries) {
+                    const delay = this.retryDelay * Math.pow(2, attempt - 1);
+                    console.log(`OpenRouter ${context} attempt ${attempt} failed, retrying in ${delay}ms:`, error.message);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        }
+        
+        throw new Error(`OpenRouter ${context} failed after ${this.maxRetries} attempts: ${lastError.message}`);
     }
 
     validateApiKey() {
@@ -121,74 +196,62 @@ Respond with a JSON object using this exact structure. Use JSON prefilling - sta
     }
 
     async generateSlashCommand(commandName, instructions, category = null) {
-        try {
-            this.validateApiKey();
+        this.validateApiKey();
 
+        return this.withRetry(async () => {
             const prompt = this.createCommandGenerationPrompt(commandName, instructions, category);
 
             console.log('Generating slash command with OpenRouter...');
             
-            const completion = await this.client.chat.completions.create({
+            const requestData = {
                 model: this.model,
-                messages: [
-                    {
-                        role: "user",
-                        content: prompt
-                    }
-                ],
+                messages: [{ role: "user", content: prompt }],
                 temperature: 0.2,
-                max_tokens: 3000,
-                extra_headers: {
-                    "X-Title": "Claude Manager Command Generator",
+                max_tokens: 3000
+            };
+
+            const response = await this.client.post('/chat/completions', requestData, {
+                headers: {
+                    'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+                    'X-Title': 'Claude Manager Command Generator'
                 }
             });
 
-            const response = completion.choices[0].message.content;
+            const content = response.data.choices[0].message.content;
             console.log('Received response from OpenRouter, parsing JSON...');
 
-            // Parse the JSON response
+            // Parse the JSON response with improved error handling
             let parsedResponse;
             try {
-                // First try direct parsing
-                parsedResponse = JSON.parse(response);
+                parsedResponse = JSON.parse(content);
             } catch (parseError) {
-                // Fallback: try to extract JSON from code blocks or other formatting
-                let cleanResponse = response;
-                
-                // Remove markdown code blocks
-                cleanResponse = cleanResponse.replace(/```json\s*/g, '').replace(/```\s*/g, '');
-                
-                // Try to find JSON object
+                // Try to extract JSON from code blocks
+                let cleanResponse = content.replace(/```json\s*/g, '').replace(/```\s*/g, '');
                 const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
+                
                 if (jsonMatch) {
-                    try {
-                        parsedResponse = JSON.parse(jsonMatch[0]);
-                        console.log('Successfully parsed JSON from markdown code blocks');
-                    } catch (secondParseError) {
-                        console.error('Failed to parse extracted JSON:', secondParseError);
-                        throw new Error('Invalid JSON response from OpenRouter');
-                    }
+                    parsedResponse = JSON.parse(jsonMatch[0]);
+                    console.log('Successfully parsed JSON from markdown formatting');
                 } else {
-                    console.error('Could not find JSON in response:', response.substring(0, 200));
-                    throw new Error('Invalid JSON response from OpenRouter');
+                    throw new Error(`OpenRouter returned non-JSON response: ${content.substring(0, 200)}...`);
                 }
             }
 
             // Validate response structure
             if (!parsedResponse.success || !parsedResponse.data) {
-                throw new Error('Invalid response structure from OpenRouter');
+                throw new Error(`Invalid response structure from OpenRouter: ${JSON.stringify(parsedResponse)}`);
             }
 
-            const { description, content, suggestedCategory, allowedTools, argumentHint, metadata } = parsedResponse.data;
+            const { description, content: cmdContent, suggestedCategory, allowedTools, argumentHint, metadata } = parsedResponse.data;
 
-            if (!description || !content) {
-                throw new Error('Missing required fields in OpenRouter response');
+            if (!description || !cmdContent) {
+                throw new Error('Missing required fields (description, content) in OpenRouter response');
             }
 
             return {
                 success: true,
                 description,
-                content,
+                content: cmdContent,
                 suggestedCategory: suggestedCategory || category,
                 allowedTools: allowedTools || ["Bash", "Read", "Write", "Edit", "Glob", "Grep"],
                 argumentHint: argumentHint || null,
@@ -199,18 +262,39 @@ Respond with a JSON object using this exact structure. Use JSON prefilling - sta
                 }
             };
 
-        } catch (error) {
+        }, `slash command generation for ${commandName}`).catch(error => {
             console.error('Error generating slash command with OpenRouter:', error);
             
-            // Return a structured error response
+            // Provide detailed error information for troubleshooting
+            const errorDetails = {
+                type: error.constructor.name,
+                message: error.message,
+                context: { commandName, category, instructions: instructions.substring(0, 100) }
+            };
+
+            let suggestions = [];
+            if (error.message.includes('Invalid') && error.message.includes('API key')) {
+                suggestions.push('Verify your OPENROUTER_API_KEY environment variable');
+                suggestions.push('Check if the API key has the correct permissions');
+            } else if (error.message.includes('credits exhausted')) {
+                suggestions.push('Add credits to your OpenRouter account');
+                suggestions.push('Check your OpenRouter account balance');
+            } else if (error.message.includes('rate limit')) {
+                suggestions.push('Wait before making more requests');
+                suggestions.push('Consider upgrading your OpenRouter plan for higher limits');
+            }
+
             return {
                 success: false,
-                error: error.message || 'Failed to generate command with OpenRouter'
+                error: error.message,
+                details: errorDetails,
+                suggestions,
+                timestamp: Date.now()
             };
-        }
+        });
     }
 
-    // Generate JavaScript hook code using OpenRouter as fallback
+    // Generate JavaScript hook code using OpenRouter
     async generateHookCode(hookRequest) {
         const {
             eventType,
@@ -222,11 +306,13 @@ Respond with a JSON object using this exact structure. Use JSON prefilling - sta
             availableServices = {}
         } = hookRequest;
 
-        try {
-            this.validateApiKey();
+        this.validateApiKey();
 
-            const ollamaUrl = availableServices.ollama || 'http://100.83.40.11:11434';
-            const ttsUrl = availableServices.tts || 'http://100.83.40.11:8080';
+        return this.withRetry(async () => {
+            const { serviceConfig } = require('../utils/service-config');
+            const serviceUrls = serviceConfig.getAllServiceUrls();
+            const ollamaUrl = availableServices.ollama || serviceUrls.ollama;
+            const ttsUrl = availableServices.tts || serviceUrls.tts;
 
             const prompt = `You are generating JavaScript code for Claude Code's hook system.
 
@@ -329,22 +415,26 @@ Return only the JavaScript code without markdown formatting or explanations. The
 
             console.log('Generating hook code with OpenRouter...');
             
-            const completion = await this.client.chat.completions.create({
+            const requestData = {
                 model: this.model,
-                messages: [
-                    {
-                        role: "user",
-                        content: prompt
-                    }
-                ],
+                messages: [{ role: "user", content: prompt }],
                 temperature: 0.1, // Low temperature for consistent code
-                max_tokens: 1500,
-                extra_headers: {
-                    "X-Title": "Claude Manager Hook Generator",
+                max_tokens: 1500
+            };
+
+            const response = await this.client.post('/chat/completions', requestData, {
+                headers: {
+                    'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+                    'X-Title': 'Claude Manager Hook Generator'
                 }
             });
 
-            const generatedCode = completion.choices[0].message.content.trim();
+            const generatedCode = response.data.choices[0].message.content.trim();
+            
+            // Validate we got actual code content
+            if (!generatedCode) {
+                throw new Error('OpenRouter returned empty code content');
+            }
             
             // Clean the code (remove markdown if present)
             const cleanedCode = this.extractJavaScriptCode(generatedCode);
@@ -363,15 +453,44 @@ Return only the JavaScript code without markdown formatting or explanations. The
                 }
             };
 
-        } catch (error) {
+        }, `hook code generation for ${eventType}`).catch(error => {
             console.error('Hook code generation failed with OpenRouter:', error);
             
+            // Provide detailed error information for troubleshooting
+            const errorDetails = {
+                type: error.constructor.name,
+                message: error.message,
+                context: {
+                    eventType,
+                    description,
+                    scope,
+                    modelUsed: this.model
+                }
+            };
+
+            let suggestions = [];
+            if (error.message.includes('Invalid') && error.message.includes('API key')) {
+                suggestions.push('Verify your OPENROUTER_API_KEY environment variable');
+                suggestions.push('Check if the API key has the correct permissions');
+            } else if (error.message.includes('credits exhausted')) {
+                suggestions.push('Add credits to your OpenRouter account');
+                suggestions.push('Check your OpenRouter account balance');
+            } else if (error.message.includes('rate limit')) {
+                suggestions.push('Wait before making more requests');
+                suggestions.push('Consider upgrading your OpenRouter plan for higher limits');
+            } else if (error.message.includes('empty code')) {
+                suggestions.push('Try a different model or adjust generation parameters');
+                suggestions.push('Check if the prompt is clear and specific enough');
+            }
+
             return {
                 success: false,
                 error: error.message,
-                fallbackCode: this.generateFallbackHookCode(eventType, description)
+                details: errorDetails,
+                suggestions,
+                timestamp: Date.now()
             };
-        }
+        });
     }
 
     // Extract JavaScript code from LLM response
@@ -400,44 +519,6 @@ Return only the JavaScript code without markdown formatting or explanations. The
         return cleaned;
     }
 
-    // Generate fallback hook code if OpenRouter fails
-    generateFallbackHookCode(eventType, description) {
-        const fallbacks = {
-            'PreToolUse': `// Pre-tool hook: ${description}
-console.log('Pre-tool event:', hookEvent.toolName);
-await utils.notify('About to execute: ' + hookEvent.toolName, 'info');
-return 'Pre-tool hook executed';`,
-
-            'PostToolUse': `// Post-tool hook: ${description}  
-console.log('Post-tool event:', hookEvent.toolName);
-if (hookEvent.filePaths && hookEvent.filePaths.length > 0) {
-  await utils.notify('Completed ' + hookEvent.toolName + ' on ' + hookEvent.filePaths.length + ' files', 'success');
-}
-return 'Post-tool hook executed';`,
-
-            'Notification': `// Notification hook: ${description}
-const message = hookEvent.context?.message || 'Notification received';
-console.log('Notification:', message);
-await utils.notify(message, 'info');
-return 'Notification processed';`,
-
-            'Stop': `// Task completion hook: ${description}
-console.log('Task completed at:', new Date().toISOString());
-await utils.playSound('success');
-await utils.notify('Claude task completed', 'success');
-return 'Task completion processed';`,
-
-            'SubagentStop': `// Subagent completion hook: ${description}
-console.log('Subagent completed at:', new Date().toISOString());
-await utils.notify('Subagent task completed', 'success');
-return 'Subagent completion processed';`
-        };
-
-        return fallbacks[eventType] || `// Generic hook: ${description}
-console.log('Hook triggered:', hookEvent.type);
-await utils.notify('Hook executed', 'info');
-return 'Hook executed successfully';`;
-    }
 
     createAgentGenerationPrompt(agentName, description, availableTools, scope) {
         return `<role>

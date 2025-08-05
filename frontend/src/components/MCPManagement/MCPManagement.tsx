@@ -32,6 +32,10 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
     args: []
   });
   const [loadingMCP, setLoadingMCP] = useState<string | null>(null);
+  const [showAIDiscovery, setShowAIDiscovery] = useState(false);
+  const [aiDescription, setAiDescription] = useState('');
+  const [discoveryResult, setDiscoveryResult] = useState<any>(null);
+  const [discoveryLoading, setDiscoveryLoading] = useState(false);
 
   useEffect(() => {
     loadTemplates();
@@ -248,23 +252,175 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
     </tr>
   );
 
+  const handleAIDiscovery = async () => {
+    if (!aiDescription.trim()) {
+      setError('Please describe what kind of MCP server you need');
+      return;
+    }
+
+    try {
+      setDiscoveryLoading(true);
+      setError(null);
+      setDiscoveryResult(null);
+
+      const result = await ApiService.discoverMCP(aiDescription, 'openrouter');
+      setDiscoveryResult(result);
+
+      if (!result.success) {
+        setError(result.error || 'Failed to discover MCP server');
+      }
+    } catch (err) {
+      setError(`Discovery failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setDiscoveryLoading(false);
+    }
+  };
+
+  const handleAddDiscoveredMCP = async () => {
+    if (!discoveryResult?.data?.template) {
+      setError('No template to add');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const result = await ApiService.addDiscoveredMCP(scope, discoveryResult.data.template, projectPath);
+      
+      if (result.success) {
+        await loadMCPs();
+        if (onMCPUpdate) {
+          onMCPUpdate(mcps);
+        }
+        
+        // Close the AI discovery form
+        setShowAIDiscovery(false);
+        setAiDescription('');
+        setDiscoveryResult(null);
+        
+        if (result.requiresEnvVars) {
+          setError(`MCP server added but requires environment variables. Please configure: ${result.template.envVars?.map((v: any) => v.key).join(', ')}`);
+        }
+      } else {
+        setError(result.error || 'Failed to add discovered MCP server');
+      }
+    } catch (err) {
+      setError(`Failed to add MCP: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="mcp-management">
       <div className="mcp-header">
         <h3>MCP Servers ({scope === 'user' ? 'User Level' : 'Project Level'})</h3>
-        <button
-          onClick={() => setShowAddForm(!showAddForm)}
-          className="btn-primary"
-          disabled={loading}
-        >
-          {showAddForm ? 'Cancel' : 'Add MCP Server'}
-        </button>
+        <div className="header-buttons">
+          <button
+            onClick={() => setShowAddForm(!showAddForm)}
+            className="btn-primary"
+            disabled={loading}
+          >
+            {showAddForm ? 'Cancel' : 'Add MCP Server'}
+          </button>
+          <button
+            onClick={() => setShowAIDiscovery(!showAIDiscovery)}
+            className="btn-secondary"
+            disabled={loading || discoveryLoading}
+          >
+            {showAIDiscovery ? 'Cancel AI' : 'Add with AI 🤖'}
+          </button>
+        </div>
       </div>
 
       {error && (
         <div className="error-message">
           {error}
           <button onClick={() => setError(null)} className="close-error">×</button>
+        </div>
+      )}
+
+      {showAIDiscovery && (
+        <div className="ai-discovery-form">
+          <h4>AI-Powered MCP Discovery 🤖</h4>
+          <p>Describe what kind of MCP server you need, and our AI will find and configure it for you!</p>
+          
+          <div className="form-group">
+            <label htmlFor="ai-description">What do you need?</label>
+            <textarea
+              id="ai-description"
+              value={aiDescription}
+              onChange={(e) => setAiDescription(e.target.value)}
+              placeholder="e.g., 'I need an MCP server to connect to my PostgreSQL database' or 'I want to integrate with Notion workspace' or 'I need browser automation for testing'"
+              rows={3}
+              disabled={discoveryLoading}
+            />
+          </div>
+
+          <div className="form-actions">
+            <button
+              onClick={handleAIDiscovery}
+              disabled={discoveryLoading || !aiDescription.trim()}
+              className="btn-primary"
+            >
+              {discoveryLoading ? 'Searching...' : 'Find MCP Server'}
+            </button>
+            <button
+              onClick={() => {
+                setShowAIDiscovery(false);
+                setAiDescription('');
+                setDiscoveryResult(null);
+              }}
+              className="btn-secondary"
+              disabled={discoveryLoading}
+            >
+              Cancel
+            </button>
+          </div>
+
+          {discoveryResult && (
+            <div className="discovery-result">
+              {discoveryResult.success ? (
+                <div className="success-result">
+                  <h5>✅ Found: {discoveryResult.data.template.template.name}</h5>
+                  <p><strong>Description:</strong> {discoveryResult.data.template.template.description}</p>
+                  <p><strong>Command:</strong> {discoveryResult.data.template.template.command} {discoveryResult.data.template.template.args?.join(' ')}</p>
+                  
+                  {discoveryResult.data.template.template.envVars && discoveryResult.data.template.template.envVars.length > 0 && (
+                    <div className="env-vars-needed">
+                      <p><strong>Environment Variables Required:</strong></p>
+                      <ul>
+                        {discoveryResult.data.template.template.envVars.map((envVar: any, idx: number) => (
+                          <li key={idx}>
+                            <strong>{envVar.key}</strong>: {envVar.description}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  
+                  <p><small>Attempts: {discoveryResult.data.attempts}, Search History: {discoveryResult.data.searchHistory?.join(', ')}</small></p>
+                  
+                  <button
+                    onClick={handleAddDiscoveredMCP}
+                    disabled={loading}
+                    className="btn-success"
+                  >
+                    {loading ? 'Adding...' : 'Add This MCP Server'}
+                  </button>
+                </div>
+              ) : (
+                <div className="error-result">
+                  <h5>❌ Discovery Failed</h5>
+                  <p>{discoveryResult.error}</p>
+                  {discoveryResult.searchHistory && discoveryResult.searchHistory.length > 0 && (
+                    <p><small>Tried: {discoveryResult.searchHistory.join(', ')}</small></p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

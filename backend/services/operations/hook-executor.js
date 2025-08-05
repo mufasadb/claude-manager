@@ -2,12 +2,14 @@ const vm = require('vm');
 const axios = require('axios');
 const OllamaService = require('../integrations/ollama-service');
 const TTSService = require('../integrations/tts-service');
+const { serviceConfig } = require('../../utils/service-config');
 
 class HookExecutor {
   constructor(userEnvVars = {}) {
     this.userEnvVars = userEnvVars;
-    this.ollamaService = new OllamaService(process.env.OLLAMA_SERVICE_URL || userEnvVars.OLLAMA_SERVICE_URL);
-    this.ttsService = new TTSService(process.env.TTS_SERVICE_URL || userEnvVars.TTS_SERVICE_URL);
+    // Use centralized service configuration
+    this.ollamaService = new OllamaService();
+    this.ttsService = new TTSService();
     
     // Execution timeout (30 seconds)
     this.executionTimeout = 30000;
@@ -190,9 +192,10 @@ class HookExecutor {
       }
     });
     
-    // Always include service URLs
-    filtered.OLLAMA_SERVICE_URL = this.userEnvVars.OLLAMA_SERVICE_URL || process.env.OLLAMA_SERVICE_URL;
-    filtered.TTS_SERVICE_URL = this.userEnvVars.TTS_SERVICE_URL || process.env.TTS_SERVICE_URL;
+    // Always include service URLs from centralized configuration
+    const serviceUrls = serviceConfig.getAllServiceUrls();
+    filtered.OLLAMA_SERVICE_URL = serviceUrls.ollama;
+    filtered.TTS_SERVICE_URL = serviceUrls.tts;
     
     return filtered;
   }
@@ -375,12 +378,11 @@ class HookExecutor {
   updateEnvVars(newEnvVars) {
     this.userEnvVars = { ...this.userEnvVars, ...newEnvVars };
     
-    // Update service URLs if changed
-    if (newEnvVars.OLLAMA_SERVICE_URL) {
-      this.ollamaService = new OllamaService(newEnvVars.OLLAMA_SERVICE_URL);
-    }
-    if (newEnvVars.TTS_SERVICE_URL) {
-      this.ttsService = new TTSService(newEnvVars.TTS_SERVICE_URL);
+    // Update service configuration and recreate services if URLs changed
+    if (newEnvVars.OLLAMA_SERVICE_URL || newEnvVars.TTS_SERVICE_URL) {
+      serviceConfig.updateConfig(newEnvVars);
+      this.ollamaService = new OllamaService();
+      this.ttsService = new TTSService();
     }
   }
 

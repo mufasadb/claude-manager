@@ -1,29 +1,130 @@
 const axios = require('axios');
+const { serviceConfig } = require('../../utils/service-config');
 
 class OllamaService {
-  constructor(baseUrl = 'http://100.83.40.11:11434') {
-    this.baseUrl = baseUrl;
+  constructor(baseUrl = null) {
+    // Use centralized service configuration with fallback
+    this.baseUrl = baseUrl || serviceConfig.getOllamaUrl();
+    this.maxRetries = 3;
+    this.retryDelay = 1000; // ms
+    this.connectionPool = new Map(); // Track active connections
+    this.modelCache = new Map(); // Cache model availability
+    this.cacheExpiry = 5 * 60 * 1000; // 5 minutes
+    
     this.client = axios.create({
       baseURL: this.baseUrl,
-      timeout: 30000,
+      timeout: 60000, // Increased timeout for model operations
       headers: {
         'Content-Type': 'application/json'
-      }
+      },
+      // Connection pooling settings
+      maxSockets: 10,
+      keepAlive: true
     });
+
+    // Add response interceptor for better error handling
+    this.client.interceptors.response.use(
+      response => response,
+      error => this.handleAxiosError(error)
+    );
   }
 
-  // Get available models
+  // Enhanced error handling for axios errors
+  handleAxiosError(error) {
+    if (error.code === 'ECONNREFUSED') {
+      throw new Error('Ollama service is not running. Please start Ollama first.');
+    } else if (error.code === 'ETIMEDOUT') {
+      throw new Error('Ollama service timed out. The model may be loading or overloaded.');
+    } else if (error.response?.status === 404) {
+      throw new Error('Requested model not found. Try pulling the model first.');
+    } else if (error.response?.status === 500) {
+      throw new Error('Ollama server error. Check server logs for details.');
+    }
+    throw error;
+  }
+
+  // Retry logic wrapper
+  async withRetry(operation, context = '') {
+    let lastError;
+    
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error;
+        
+        // Don't retry on certain errors
+        if (error.message.includes('not running') || 
+            error.message.includes('not found') ||
+            error.response?.status === 404) {
+          throw error;
+        }
+        
+        if (attempt < this.maxRetries) {
+          const delay = this.retryDelay * Math.pow(2, attempt - 1); // Exponential backoff
+          console.log(`Ollama ${context} attempt ${attempt} failed, retrying in ${delay}ms:`, error.message);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+    
+    throw new Error(`Ollama ${context} failed after ${this.maxRetries} attempts: ${lastError.message}`);
+  }
+
+  // Get available models with caching
   async getModels() {
-    try {
+    const cacheKey = 'models';
+    const cached = this.modelCache.get(cacheKey);
+    
+    if (cached && (Date.now() - cached.timestamp) < this.cacheExpiry) {
+      return cached.data;
+    }
+    
+    return this.withRetry(async () => {
       const response = await this.client.get('/api/tags');
-      return response.data.models || [];
+      const models = response.data.models || [];
+      
+      // Cache the result
+      this.modelCache.set(cacheKey, {
+        data: models,
+        timestamp: Date.now()
+      });
+      
+      return models;
+    }, 'model fetch');
+  }
+
+  // Check if a specific model is available
+  async isModelAvailable(modelName) {
+    try {
+      const models = await this.getModels();
+      return models.some(model => model.name === modelName || model.name.startsWith(modelName + ':'));
     } catch (error) {
-      console.error('Error fetching Ollama models:', error.message);
-      throw new Error(`Failed to fetch models: ${error.message}`);
+      console.warn(`Could not check model availability for ${modelName}:`, error.message);
+      return false;
     }
   }
 
-  // Generate text completion
+  // Auto-pull model if not available
+  async ensureModelAvailable(modelName) {
+    const isAvailable = await this.isModelAvailable(modelName);
+    
+    if (!isAvailable) {
+      console.log(`Model ${modelName} not found, attempting to pull...`);
+      try {
+        await this.pullModel(modelName);
+        // Clear cache after pulling new model
+        this.modelCache.delete('models');
+        return true;
+      } catch (error) {
+        throw new Error(`Model ${modelName} is not available and could not be pulled: ${error.message}`);
+      }
+    }
+    
+    return true;
+  }
+
+  // Generate text completion with reliability improvements
   async generate(options = {}) {
     const {
       model = 'llama3.2',
@@ -36,10 +137,13 @@ class OllamaService {
     } = options;
 
     if (!prompt) {
-      throw new Error('Prompt is required');
+      throw new Error('Prompt is required for text generation');
     }
 
-    try {
+    // Ensure model is available
+    await this.ensureModelAvailable(model);
+
+    return this.withRetry(async () => {
       const requestData = {
         model,
         prompt,
@@ -54,23 +158,32 @@ class OllamaService {
 
       const response = await this.client.post('/api/generate', requestData);
       
+      // Validate response
+      if (!response.data) {
+        throw new Error('Empty response from Ollama');
+      }
+      
       if (stream) {
-        return response.data; // Return stream response as-is
+        return response.data;
       } else {
-        return {
-          response: response.data.response,
-          model: response.data.model,
+        const result = {
+          response: response.data.response || '',
+          model: response.data.model || model,
           created_at: response.data.created_at,
           done: response.data.done
         };
+        
+        // Validate we got actual content
+        if (!result.response.trim()) {
+          throw new Error('Ollama returned empty response content');
+        }
+        
+        return result;
       }
-    } catch (error) {
-      console.error('Error generating with Ollama:', error.message);
-      throw new Error(`Ollama generation failed: ${error.message}`);
-    }
+    }, `text generation with model ${model}`);
   }
 
-  // Chat completion (for conversation-style interactions)
+  // Chat completion with reliability improvements
   async chat(options = {}) {
     const {
       model = 'llama3.2',
@@ -81,11 +194,21 @@ class OllamaService {
       max_tokens = 1000
     } = options;
 
-    if (!messages || !Array.isArray(messages)) {
-      throw new Error('Messages array is required');
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      throw new Error('Non-empty messages array is required for chat');
     }
 
-    try {
+    // Validate message format
+    for (const msg of messages) {
+      if (!msg.role || !msg.content) {
+        throw new Error('Each message must have role and content properties');
+      }
+    }
+
+    // Ensure model is available
+    await this.ensureModelAvailable(model);
+
+    return this.withRetry(async () => {
       const requestData = {
         model,
         messages,
@@ -99,51 +222,132 @@ class OllamaService {
 
       const response = await this.client.post('/api/chat', requestData);
       
+      // Validate response
+      if (!response.data) {
+        throw new Error('Empty response from Ollama chat');
+      }
+      
       if (stream) {
         return response.data;
       } else {
-        return {
+        const result = {
           message: response.data.message,
-          model: response.data.model,
+          model: response.data.model || model,
           created_at: response.data.created_at,
           done: response.data.done
         };
+        
+        // Validate we got actual content
+        if (!result.message?.content?.trim()) {
+          throw new Error('Ollama chat returned empty message content');
+        }
+        
+        return result;
       }
-    } catch (error) {
-      console.error('Error chatting with Ollama:', error.message);
-      throw new Error(`Ollama chat failed: ${error.message}`);
-    }
+    }, `chat with model ${model}`);
   }
 
-  // Pull a model (download if not available)
-  async pullModel(modelName) {
-    try {
-      const response = await this.client.post('/api/pull', {
-        name: modelName
+  // Pull a model with progress tracking
+  async pullModel(modelName, progressCallback = null) {
+    console.log(`Starting pull for model: ${modelName}`);
+    
+    return this.withRetry(async () => {
+      // Use longer timeout for model pulling
+      const pullClient = axios.create({
+        baseURL: this.baseUrl,
+        timeout: 300000, // 5 minutes for model downloads
+        headers: { 'Content-Type': 'application/json' }
       });
+
+      const response = await pullClient.post('/api/pull', {
+        name: modelName,
+        stream: !!progressCallback
+      });
+
+      if (progressCallback && response.data.stream) {
+        // Handle streaming progress updates
+        return new Promise((resolve, reject) => {
+          let lastStatus = '';
+          
+          response.data.on('data', (chunk) => {
+            try {
+              const data = JSON.parse(chunk.toString());
+              if (data.status !== lastStatus) {
+                progressCallback(data);
+                lastStatus = data.status;
+              }
+              if (data.status === 'success' || data.done) {
+                resolve(data);
+              }
+            } catch (parseError) {
+              // Ignore parsing errors in streaming data
+            }
+          });
+          
+          response.data.on('error', reject);
+          response.data.on('end', () => resolve(response.data));
+        });
+      }
+
       return response.data;
-    } catch (error) {
-      console.error('Error pulling Ollama model:', error.message);
-      throw new Error(`Failed to pull model ${modelName}: ${error.message}`);
-    }
+    }, `model pull for ${modelName}`);
   }
 
-  // Check if service is available
+  // Enhanced health check with detailed status
   async healthCheck() {
     try {
+      const startTime = Date.now();
       const response = await this.client.get('/api/tags');
+      const responseTime = Date.now() - startTime;
+      
+      const models = response.data.models || [];
+      const hasRecommendedModels = models.some(m => 
+        m.name.includes('llama3.2') || 
+        m.name.includes('codellama') || 
+        m.name.includes('mistral')
+      );
+
       return {
         status: 'healthy',
         available: true,
-        models: response.data.models?.length || 0
+        responseTime,
+        models: models.length,
+        modelList: models.map(m => m.name),
+        hasRecommendedModels,
+        version: response.data.version || 'unknown',
+        serverUrl: this.baseUrl
       };
     } catch (error) {
       return {
         status: 'unhealthy',
         available: false,
-        error: error.message
+        error: error.message,
+        serverUrl: this.baseUrl,
+        suggestions: this.getHealthSuggestions(error)
       };
     }
+  }
+
+  // Get suggestions based on health check errors
+  getHealthSuggestions(error) {
+    const suggestions = [];
+    
+    if (error.message.includes('not running')) {
+      suggestions.push('Start Ollama service: `ollama serve`');
+      suggestions.push('Check if Ollama is installed: `which ollama`');
+    }
+    
+    if (error.message.includes('timed out')) {
+      suggestions.push('Ollama may be starting up, wait 30 seconds and try again');
+      suggestions.push('Check system resources (CPU/Memory)');
+    }
+    
+    if (error.code === 'ECONNREFUSED') {
+      suggestions.push(`Check if service is running on ${this.baseUrl}`);
+      suggestions.push('Verify firewall settings if using remote Ollama');
+    }
+    
+    return suggestions;
   }
 
   // Helper method for hook system integration
@@ -246,18 +450,47 @@ Provide a brief, human-readable summary of what happened.`;
 
     } catch (error) {
       console.error('Hook code generation failed:', error);
+      
+      // Provide detailed error information for troubleshooting
+      const errorDetails = {
+        type: error.constructor.name,
+        message: error.message,
+        context: {
+          eventType,
+          description,
+          scope,
+          modelUsed: 'llama3.2'
+        }
+      };
+
+      // Add specific suggestions based on error type
+      let suggestions = [];
+      if (error.message.includes('not running')) {
+        suggestions.push('Start Ollama service with: ollama serve');
+        suggestions.push('Verify Ollama is installed and accessible');
+      } else if (error.message.includes('not found')) {
+        suggestions.push('Pull the required model: ollama pull llama3.2');
+        suggestions.push('Check available models: ollama list');
+      } else if (error.message.includes('empty response')) {
+        suggestions.push('Try a different model or adjust generation parameters');
+        suggestions.push('Check if the model is properly loaded');
+      }
+
       return {
         success: false,
         error: error.message,
-        fallbackCode: this.generateFallbackHookCode(eventType, description)
+        details: errorDetails,
+        suggestions,
+        timestamp: Date.now()
       };
     }
   }
 
   // Build comprehensive prompt for hook code generation
   buildHookGenerationPrompt({ eventType, pattern, description, scope, projectInfo, userEnv, availableServices }) {
-    const ollamaUrl = availableServices.ollama || 'http://100.83.40.11:11434';
-    const ttsUrl = availableServices.tts || 'http://100.83.40.11:8080';
+    const serviceUrls = serviceConfig.getAllServiceUrls();
+    const ollamaUrl = availableServices.ollama || serviceUrls.ollama;
+    const ttsUrl = availableServices.tts || serviceUrls.tts;
 
     return `You are generating JavaScript code for Claude Code's hook system.
 
@@ -455,44 +688,6 @@ This runs when a Claude subagent completes. Use this for:
     return cleaned;
   }
 
-  // Generate fallback hook code if LLM fails
-  generateFallbackHookCode(eventType, description) {
-    const fallbacks = {
-      'PreToolUse': `// Pre-tool hook: ${description}
-console.log('Pre-tool event:', hookEvent.toolName);
-await utils.notify('About to execute: ' + hookEvent.toolName, 'info');
-return 'Pre-tool hook executed';`,
-
-      'PostToolUse': `// Post-tool hook: ${description}  
-console.log('Post-tool event:', hookEvent.toolName);
-if (hookEvent.filePaths && hookEvent.filePaths.length > 0) {
-  await utils.notify('Completed ' + hookEvent.toolName + ' on ' + hookEvent.filePaths.length + ' files', 'success');
-}
-return 'Post-tool hook executed';`,
-
-      'Notification': `// Notification hook: ${description}
-const message = hookEvent.context?.message || 'Notification received';
-console.log('Notification:', message);
-await utils.notify(message, 'info');
-return 'Notification processed';`,
-
-      'Stop': `// Task completion hook: ${description}
-console.log('Task completed at:', new Date().toISOString());
-await utils.playSound('success');
-await utils.notify('Claude task completed', 'success');
-return 'Task completion processed';`,
-
-      'SubagentStop': `// Subagent completion hook: ${description}
-console.log('Subagent completed at:', new Date().toISOString());
-await utils.notify('Subagent task completed', 'success');
-return 'Subagent completion processed';`
-    };
-
-    return fallbacks[eventType] || `// Generic hook: ${description}
-console.log('Hook triggered:', hookEvent.type);
-await utils.notify('Hook executed', 'info');
-return 'Hook executed successfully';`;
-  }
 }
 
 module.exports = OllamaService;
