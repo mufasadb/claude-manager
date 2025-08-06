@@ -26,7 +26,105 @@ class MCPService {
     
     // MCP Templates for popular servers
     this.templates = {
-      // Templates will be populated by AI discovery
+      'supabase': {
+        name: 'Supabase',
+        description: 'Connect to Supabase database for queries and operations',
+        command: 'npx @supabase/mcp-server',
+        transport: 'stdio',
+        envVars: [
+          { key: 'SUPABASE_URL', description: 'Your Supabase project URL', required: true },
+          { key: 'SUPABASE_SERVICE_ROLE_KEY', description: 'Your Supabase service role key', required: true }
+        ],
+        args: []
+      },
+      'neo4j': {
+        name: 'Neo4j',
+        description: 'Connect to Neo4j graph database with Cypher queries',
+        command: 'npx @neo4j/mcp-server',
+        transport: 'stdio',
+        envVars: [
+          { key: 'NEO4J_URI', description: 'Neo4j database URI (e.g., bolt://localhost:7687)', required: true },
+          { key: 'NEO4J_USERNAME', description: 'Neo4j username', required: true },
+          { key: 'NEO4J_PASSWORD', description: 'Neo4j password', required: true }
+        ],
+        args: []
+      },
+      'playwright': {
+        name: 'Playwright',
+        description: 'Browser automation for testing and scraping',
+        command: 'npx @playwright/mcp-server',
+        transport: 'stdio',
+        envVars: [],
+        args: []
+      },
+      'puppeteer': {
+        name: 'Puppeteer',
+        description: 'Chrome browser automation and control',
+        command: 'npx @puppeteer/mcp-server',
+        transport: 'stdio',
+        envVars: [],
+        args: []
+      },
+      'github': {
+        name: 'GitHub',
+        description: 'GitHub repository and issue management',
+        command: 'npx @github/mcp-server',
+        transport: 'stdio',
+        envVars: [
+          { key: 'GITHUB_TOKEN', description: 'GitHub personal access token', required: true }
+        ],
+        args: []
+      },
+      'postgresql': {
+        name: 'PostgreSQL',
+        description: 'Connect to PostgreSQL databases',
+        command: 'npx @postgresql/mcp-server',
+        transport: 'stdio',
+        envVars: [
+          { key: 'DATABASE_URL', description: 'PostgreSQL connection string', required: true }
+        ],
+        args: []
+      },
+      'notion': {
+        name: 'Notion',
+        description: 'Notion workspace integration',
+        command: 'npx @notion/mcp-server',
+        transport: 'stdio',
+        envVars: [
+          { key: 'NOTION_TOKEN', description: 'Notion integration token', required: true }
+        ],
+        args: []
+      },
+      'figma': {
+        name: 'Figma',
+        description: 'Figma design file access and manipulation',
+        command: 'npx @figma/mcp-server',
+        transport: 'stdio',
+        envVars: [
+          { key: 'FIGMA_TOKEN', description: 'Figma personal access token', required: true }
+        ],
+        args: []
+      },
+      'context7': {
+        name: 'Context7',
+        description: 'Up-to-date documentation and code examples for any library',
+        command: 'npx -y @upstash/context7-mcp',
+        transport: 'stdio',
+        envVars: [],
+        args: []
+      },
+      'mcp-atlassian': {
+        name: 'MCP Server for Atlassian Products',
+        description: 'MCP server for Jira, Confluence, and other Atlassian products',
+        command: 'docker run -i --rm ghcr.io/sooperset/mcp-atlassian:latest',
+        transport: 'stdio',
+        envVars: [
+          { key: 'JIRA_URL', description: 'The URL of your Jira instance', required: true },
+          { key: 'JIRA_USERNAME', description: 'The username to authenticate with Jira', required: true },
+          { key: 'JIRA_API_TOKEN', description: 'The API token to authenticate with Jira', required: true }
+        ],
+        args: []
+      }
     };
   }
 
@@ -307,15 +405,17 @@ class MCPService {
         cmd += ` --transport ${transport}`;
       }
       
-      // Add environment variables before name
+      // Add name first
+      cmd += ` ${name}`;
+      
+      // Add environment variables after name
       if (envVars && Object.keys(envVars).length > 0) {
         for (const [key, value] of Object.entries(envVars)) {
-          cmd += ` -e ${key}=${value}`;
+          // Properly quote environment variable values to handle special characters
+          const quotedValue = `"${value.replace(/"/g, '\\"')}"`;
+          cmd += ` -e ${key}=${quotedValue}`;
         }
       }
-      
-      // Add name
-      cmd += ` ${name}`;
       
       // Add command with proper separator for stdio transport
       if (transport === 'stdio' || !transport) {

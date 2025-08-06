@@ -42,7 +42,7 @@ class ClaudeManager {
     this.claudeConfigReader = new ClaudeConfigReader();
     this.mcpService = new MCPService(this.claudeConfigReader);
     this.commandService = new CommandService();
-    this.agentService = new AgentService();
+    this.agentService = new AgentService(this);
     this.hookRegistry = new HookRegistry();
     this.hookEventService = null; // Will be initialized after user env vars are loaded
     this.hookGenerator = null; // Will be initialized with Task agent reference
@@ -1274,43 +1274,13 @@ class ClaudeManager {
         const templateKey = template.templateKey;
         this.mcpService.templates[templateKey] = template.template;
 
-        // Create MCP config from template
-        const mcpConfig = {
-          name: templateKey, // Use templateKey as the MCP name (e.g., "mcp-atlassian")
-          command: template.template.command,
-          transport: template.template.transport || 'stdio',
-          args: template.template.args || [],
-          envVars: {}
-        };
-
-        // Add any required environment variables (will prompt user if missing)
-        if (template.template.envVars && template.template.envVars.length > 0) {
-          for (const envVar of template.template.envVars) {
-            if (envVar.required && !process.env[envVar.key]) {
-              // Return template for user to configure environment variables
-              return res.json({
-                success: true,
-                requiresEnvVars: true,
-                template: template.template,
-                templateKey: templateKey,
-                message: 'Template added but requires environment variables'
-              });
-            } else if (process.env[envVar.key]) {
-              mcpConfig.envVars[envVar.key] = process.env[envVar.key];
-            }
-          }
-        }
-
-        const result = await this.mcpService.addMCP(scope, { ...mcpConfig, projectPath });
-        
-        // Update state and broadcast
-        this.state.mcps = this.mcpService.getState();
-        this.broadcastToClients({ type: 'mcpUpdate', mcps: this.state.mcps });
-        
+        // Return success confirmation without mounting the MCP
         res.json({
           success: true,
-          data: result,
-          templateAdded: templateKey
+          templateAdded: templateKey,
+          templateName: template.template.name,
+          message: `Template "${template.template.name}" has been created successfully! You can now select it from the MCP templates dropdown in the regular Add MCP screen.`,
+          navigateTo: 'mcp-add-screen'
         });
       } catch (error) {
         console.error('Failed to add discovered MCP:', error);
@@ -1410,7 +1380,8 @@ class ClaudeManager {
 
     this.app.get('/api/agents/available-tools', (req, res) => {
       try {
-        const tools = this.agentService.getAvailableTools();
+        const { scope = 'user', projectName } = req.query;
+        const tools = this.agentService.getAvailableTools(scope, projectName);
         res.json({ tools });
       } catch (error) {
         res.status(500).json({ error: error.message });

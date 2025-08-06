@@ -118,6 +118,7 @@ class HookExecutor {
         Date: Date,
         Math: Math,
         console: context.console,
+        require: require, // Add require for child_process and other modules
         
         // Result handling
         resolve: resolve,

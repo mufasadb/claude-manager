@@ -5,9 +5,10 @@ const { validatePath } = require('../utils/path-utils');
 const OpenRouterService = require('./openrouter-service');
 
 class AgentService {
-    constructor() {
+    constructor(claudeManagerInstance = null) {
         this.validNamePattern = /^[a-zA-Z0-9_-]+$/;
         this.openRouterService = new OpenRouterService();
+        this.claudeManagerInstance = claudeManagerInstance;
         this.asciiPresets = [
             { face: '( ͡° ͜ʖ ͡°)', name: 'Mischievous', description: 'Playful problem solver' },
             { face: '¯\\_(ツ)_/¯', name: 'Casual', description: 'Relaxed and easy-going' },
@@ -356,19 +357,72 @@ ${metadata.agentSummary}
         };
     }
 
-    getAvailableTools() {
-        // In a real implementation, this could dynamically discover available tools
-        // For now, return the default set plus common MCP tools
-        return [
-            ...this.defaultTools,
-            // Add common MCP tools that might be available
-            'mcp__context7__resolve-library-id',
-            'mcp__context7__get-library-docs',
-            'mcp__puppeteer__puppeteer_navigate',
-            'mcp__puppeteer__puppeteer_screenshot',
-            'mcp__notion__API-post-search',
-            'mcp__figma__add_figma_file'
-        ];
+    getAvailableTools(scope = 'user', projectName = null) {
+        // Get base tools that are always available
+        const availableTools = [...this.defaultTools];
+        
+        // Get MCP state to determine available MCP tools
+        const mcpState = this.claudeManagerInstance?.mcpService?.getState();
+        if (mcpState) {
+            // Get user-level MCPs (available for all scopes)
+            Object.keys(mcpState.userMCPs?.active || {}).forEach(mcpName => {
+                const mcpTools = this.getMcpTools(mcpName);
+                availableTools.push(...mcpTools);
+            });
+            
+            // For project scope, also include project-specific MCPs
+            if (scope === 'project' && projectName && mcpState.projectMCPs?.active?.[projectName]) {
+                Object.keys(mcpState.projectMCPs.active[projectName] || {}).forEach(mcpName => {
+                    const mcpTools = this.getMcpTools(mcpName);
+                    availableTools.push(...mcpTools);
+                });
+            }
+        }
+        
+        // Remove duplicates and return
+        return Array.from(new Set(availableTools));
+    }
+
+    // Helper method to get tools for a specific MCP
+    getMcpTools(mcpName) {
+        const toolMapping = {
+            'context7': [
+                'mcp__context7__resolve-library-id',
+                'mcp__context7__get-library-docs'
+            ],
+            'playwright': [
+                'mcp__playwright__browser_navigate',
+                'mcp__playwright__browser_snapshot',
+                'mcp__playwright__browser_click',
+                'mcp__playwright__browser_type',
+                'mcp__playwright__browser_evaluate',
+                'mcp__playwright__browser_take_screenshot',
+                'mcp__playwright__browser_close',
+                'mcp__playwright__browser_drag',
+                'mcp__playwright__browser_hover',
+                'mcp__playwright__browser_select_option',
+                'mcp__playwright__browser_wait_for'
+            ],
+            'puppeteer': [
+                'mcp__puppeteer__puppeteer_navigate',
+                'mcp__puppeteer__puppeteer_screenshot',
+                'mcp__puppeteer__puppeteer_evaluate',
+                'mcp__puppeteer__puppeteer_click',
+                'mcp__puppeteer__puppeteer_fill'
+            ],
+            'notion': [
+                'mcp__notion__API-post-search'
+            ],
+            'figma': [
+                'mcp__figma__add_figma_file',
+                'mcp__figma__view_node',
+                'mcp__figma__read_comments',
+                'mcp__figma__post_comment',
+                'mcp__figma__reply_to_comment'
+            ]
+        };
+        
+        return toolMapping[mcpName] || [];
     }
 }
 

@@ -487,8 +487,13 @@ export class ApiService {
     return response.json();
   }
 
-  static async getAvailableTools(): Promise<{ tools: string[] }> {
-    const response = await fetch(`${API_BASE}/api/agents/available-tools`);
+  static async getAvailableTools(scope: string = 'user', projectName?: string): Promise<{ tools: string[] }> {
+    const params = new URLSearchParams({ scope });
+    if (projectName) {
+      params.append('projectName', projectName);
+    }
+    
+    const response = await fetch(`${API_BASE}/api/agents/available-tools?${params}`);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }

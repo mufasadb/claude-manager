@@ -93,6 +93,18 @@ class MCPOperations {
         transport: 'stdio',
         envVars: [],
         args: []
+      },
+      'mcp-atlassian': {
+        name: 'MCP Server for Atlassian Products',
+        description: 'MCP server for Jira, Confluence, and other Atlassian products',
+        command: 'docker run -i --rm ghcr.io/sooperset/mcp-atlassian:latest',
+        transport: 'stdio',
+        envVars: [
+          { key: 'JIRA_URL', description: 'The URL of your Jira instance', required: true },
+          { key: 'JIRA_USERNAME', description: 'The username to authenticate with Jira', required: true },
+          { key: 'JIRA_API_TOKEN', description: 'The API token to authenticate with Jira', required: true }
+        ],
+        args: []
       }
     };
   }
@@ -156,15 +168,17 @@ class MCPOperations {
         cmd += ` --transport ${transport}`;
       }
       
-      // Add environment variables before name
+      // Add name first
+      cmd += ` ${name}`;
+      
+      // Add environment variables after name
       if (envVars && Object.keys(envVars).length > 0) {
         for (const [key, value] of Object.entries(envVars)) {
-          cmd += ` -e ${key}=${value}`;
+          // Properly quote environment variable values to handle special characters
+          const quotedValue = `"${value.replace(/"/g, '\\"')}"`;
+          cmd += ` -e ${key}=${quotedValue}`;
         }
       }
-      
-      // Add name
-      cmd += ` ${name}`;
       
       // Add command with proper separator for stdio transport
       if (transport === 'stdio' || !transport) {

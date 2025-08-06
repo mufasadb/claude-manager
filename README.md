@@ -9,6 +9,7 @@ Claude Manager is a centralized control panel that simplifies working with Claud
 - **Global Project Registry**: Register any project from anywhere and manage all Claude configurations from one dashboard
 - **AI-Powered Slash Commands**: Generate professional Claude Code slash commands using detailed instructions with Gemini Flash 1.5
 - **MCP Server Management**: Add, configure, and manage Model Context Protocol servers with popular templates
+- **MCP Found and Created by AI**: Takes isntruction, searches for AI and molds to claude-manager's template structure
 - **Automated Hooks**: Set up code formatting, testing, and safety checks that run automatically
 - **Session Tracking**: Monitor your Claude Code usage against plan limits with real-time countdowns
 - **Environment Management**: Centralized API key and environment variable management
@@ -36,6 +37,8 @@ Claude Manager is a centralized control panel that simplifies working with Claud
    
    # Edit .env with your OpenRouter API key
    nano .env  # Add your OPENROUTER_API_KEY
+
+   # Fallback Localllm (I use Ollama on a aserver at home)
    
    # Create config directory and copy examples
    mkdir -p ~/.claude-manager
@@ -189,8 +192,8 @@ Centralized management of API keys and configuration:
 ### Setting Up a New Project
 
 1. **Navigate to project**: `cd /path/to/my-project`
-2. **Register project**: `cm-reg my-project`  
-3. **Open dashboard**: Visit http://localhost:3455
+2. **Register project**: `cm-reg` or `cm-reg project-name`
+3. **Open dashboard**: Visit http://localhost:3456
 4. **Add MCP servers**: Connect to databases and external services
 5. **Add hooks**: Set up auto-formatting and safety checks
 6. **Configure environment**: Add any required API keys
@@ -202,11 +205,6 @@ The dashboard provides a unified view of all registered projects with:
 - Quick access to settings files  
 - Environment variable management
 
-### Working with Teams
-
-1. **Standardize hooks**: Use common hook presets across team
-2. **Environment setup**: Copy user-level variables to project-specific
-3. **Session coordination**: Track team usage patterns
 
 ## Configuration Files
 
@@ -224,40 +222,6 @@ your-project/
 ├── .env                   # Project environment variables
 └── CLAUDE.md             # Project-specific instructions
 ```
-
-## API Integration
-
-The dashboard exposes a REST API for automation and integration:
-
-```bash
-# Register project programmatically
-curl -X POST localhost:3455/api/register-project \
-  -H "Content-Type: application/json" \
-  -d '{"name": "my-project", "path": "/path/to/project"}'
-
-# Add MCP server
-curl -X POST localhost:3455/api/mcp/add \
-  -H "Content-Type: application/json" \
-  -d '{"scope": "user", "mcpConfig": {"name": "my-db", "command": "npx @supabase/mcp-server", "envVars": {"SUPABASE_URL": "..."}}}' 
-
-# Get system status
-curl localhost:3455/api/status
-
-# List MCP servers
-curl localhost:3455/api/mcp/list/user
-
-# Enable session tracking  
-curl -X POST localhost:3455/api/toggle-session-tracking \
-  -H "Content-Type: application/json" \
-  -d '{"enabled": true}'
-```
-
-## Requirements
-
-- **Node.js** 16+ and npm
-- **Claude Code CLI** installed and configured
-- **Git** (optional, for remote URL detection)
-- **macOS or Linux** (Windows via WSL)
 
 ## Development
 

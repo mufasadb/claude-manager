@@ -73,6 +73,12 @@ const AgentCreator: React.FC<AgentCreatorProps> = ({ projects }) => {
     return Array.from(new Set(filteredTools)); // Remove duplicates
   };
 
+  const getVisibleTools = () => {
+    const filtered = getFilteredTools();
+    // Hide selected tools unless they match current search/category filters
+    return filtered.filter(tool => !formData.tools.includes(tool));
+  };
+
   useEffect(() => {
     loadTemplates();
     loadAvailableTools();
@@ -80,6 +86,7 @@ const AgentCreator: React.FC<AgentCreatorProps> = ({ projects }) => {
 
   useEffect(() => {
     loadExistingAgents();
+    loadAvailableTools(); // Reload tools when scope/project changes
   }, [formData.scope, formData.projectName]);
 
   useEffect(() => {
@@ -112,7 +119,7 @@ const AgentCreator: React.FC<AgentCreatorProps> = ({ projects }) => {
 
   const loadAvailableTools = async () => {
     try {
-      const response = await ApiService.getAvailableTools();
+      const response = await ApiService.getAvailableTools(formData.scope, formData.projectName);
       setAvailableTools(response.tools);
     } catch (error) {
       console.warn('Failed to load available tools:', error);
@@ -664,18 +671,75 @@ Focus on specialization over generalization - agents that do one thing excellent
               </div>
             </div>
 
+            {/* Selected Tools Display */}
+            {formData.tools.length > 0 && (
+              <div style={{ 
+                marginBottom: '12px',
+                padding: '10px',
+                backgroundColor: '#2a5d3a',
+                border: '1px solid #4CAF50',
+                borderRadius: '4px'
+              }}>
+                <div style={{ color: '#4CAF50', fontWeight: 'bold', marginBottom: '8px', fontSize: '14px' }}>
+                  Selected Tools ({formData.tools.length}):
+                </div>
+                <div style={{ 
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '4px'
+                }}>
+                  {formData.tools.map((tool, index) => (
+                    <span key={index} style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '2px 6px',
+                      backgroundColor: '#1e1e1e',
+                      color: '#4CAF50',
+                      borderRadius: '3px',
+                      fontSize: '12px'
+                    }}>
+                      {tool}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newTools = formData.tools.filter(t => t !== tool);
+                          handleInputChange('tools', newTools);
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#f44336',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          padding: '0',
+                          marginLeft: '2px'
+                        }}
+                        title="Remove tool"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Tool Selection Area */}
             <div style={{ 
-              maxHeight: '200px', 
+              maxHeight: '400px', 
               overflowY: 'auto',
               padding: '10px',
               backgroundColor: '#1e1e1e',
               border: validationErrors.tools ? '2px solid #f44336' : '1px solid #666',
               borderRadius: '4px'
             }}>
-              {getFilteredTools().length === 0 ? (
+              {getVisibleTools().length === 0 ? (
                 <div style={{ color: '#888', textAlign: 'center', padding: '20px' }}>
-                  No tools found. Try adjusting your search or category filters.
+                  {formData.tools.length > 0 ? 
+                    'All matching tools are already selected.' : 
+                    'No tools found. Try adjusting your search or category filters.'
+                  }
                 </div>
               ) : (
                 <div style={{ 
@@ -683,7 +747,7 @@ Focus on specialization over generalization - agents that do one thing excellent
                   gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
                   gap: '6px' 
                 }}>
-                  {getFilteredTools().map((tool, index) => (
+                  {getVisibleTools().map((tool, index) => (
                     <label key={index} style={{ 
                       display: 'flex', 
                       alignItems: 'center', 
@@ -692,17 +756,17 @@ Focus on specialization over generalization - agents that do one thing excellent
                       cursor: 'pointer',
                       padding: '4px',
                       borderRadius: '3px',
-                      backgroundColor: formData.tools.includes(tool) ? '#2a5d3a' : 'transparent',
+                      backgroundColor: 'transparent',
                       fontSize: '13px'
                     }}>
                       <input
                         type="checkbox"
-                        checked={formData.tools.includes(tool)}
+                        checked={false}
                         onChange={(e) => {
-                          const newTools = e.target.checked
-                            ? [...formData.tools, tool]
-                            : formData.tools.filter(t => t !== tool);
-                          handleInputChange('tools', newTools);
+                          if (e.target.checked) {
+                            const newTools = [...formData.tools, tool];
+                            handleInputChange('tools', newTools);
+                          }
                         }}
                         style={{ margin: '0' }}
                       />
@@ -724,8 +788,8 @@ Focus on specialization over generalization - agents that do one thing excellent
               <button
                 type="button"
                 onClick={() => {
-                  const filteredTools = getFilteredTools();
-                  handleInputChange('tools', Array.from(new Set([...formData.tools, ...filteredTools])));
+                  const visibleTools = getVisibleTools();
+                  handleInputChange('tools', Array.from(new Set([...formData.tools, ...visibleTools])));
                 }}
                 style={{
                   padding: '4px 8px',
@@ -736,8 +800,9 @@ Focus on specialization over generalization - agents that do one thing excellent
                   cursor: 'pointer',
                   fontSize: '12px'
                 }}
+                disabled={getVisibleTools().length === 0}
               >
-                Select All Visible
+                Select All Visible ({getVisibleTools().length})
               </button>
               <button
                 type="button"
@@ -754,8 +819,9 @@ Focus on specialization over generalization - agents that do one thing excellent
                   cursor: 'pointer',
                   fontSize: '12px'
                 }}
+                disabled={formData.tools.length === 0}
               >
-                Deselect All Visible
+                Deselect Matching
               </button>
               <button
                 type="button"
@@ -769,6 +835,7 @@ Focus on specialization over generalization - agents that do one thing excellent
                   cursor: 'pointer',
                   fontSize: '12px'
                 }}
+                disabled={formData.tools.length === 0}
               >
                 Clear All
               </button>
@@ -780,8 +847,7 @@ Focus on specialization over generalization - agents that do one thing excellent
               </div>
             )}
             <div style={{ color: '#888', fontSize: '14px', marginTop: '4px' }}>
-              Selected tools: {formData.tools.length} / {availableTools.length} 
-              {getFilteredTools().length !== availableTools.length && ` (${getFilteredTools().length} visible)`}
+              Selected: {formData.tools.length} | Available: {availableTools.length} | Visible: {getVisibleTools().length}
             </div>
           </div>
 

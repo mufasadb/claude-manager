@@ -171,7 +171,7 @@ class HookEventService extends EventEmitter {
     }
 
     // Validate event type
-    const validEventTypes = ['PreToolUse', 'PostToolUse', 'Notification', 'Stop', 'SubagentStop'];
+    const validEventTypes = ['PreToolUse', 'PostToolUse', 'Notification', 'Stop', 'SubagentStop', 'UserPromptSubmit'];
     if (!validEventTypes.includes(eventData.eventType)) {
       throw new Error(`Invalid event type: ${eventData.eventType}`);
     }
