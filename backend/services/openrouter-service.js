@@ -3,7 +3,7 @@ const axios = require('axios');
 class OpenRouterService {
     constructor() {
         this.baseUrl = "https://openrouter.ai/api/v1";
-        this.model = "anthropic/claude-3-haiku";
+        this.model = "openai/gpt-5-mini";
         this.maxRetries = 3;
         this.retryDelay = 2000; // ms
         this.rateLimitDelay = 1000; // ms between requests
