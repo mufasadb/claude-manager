@@ -1,613 +1,348 @@
-# Claude Manager - Technical Architecture
+# Claude Manager - Technical Development Guide
 
-Node.js application providing a centralized dashboard for monitoring and managing Claude Code configurations, MCP servers, hooks, and session tracking across multiple projects. Built with Express backend, React TypeScript frontend, real-time WebSocket communication, and powered by Bun runtime for fast development.
+A real-time web dashboard for managing Claude Code across multiple projects with centralized control over MCP servers, automated hooks, session tracking, and configuration management through live WebSocket updates.
 
-## Quick Developer Onboarding
+## System Architecture Overview
 
-This is a dual-service application with Bun as the package manager and runtime. The backend uses WebSocket for real-time updates and file system monitoring via chokidar. The application follows a modular service-oriented architecture optimized for performance.
+**Application Type**: Dual-service web application with real-time synchronization  
+**Primary Runtime**: Bun (package management + fast development execution)  
+**Backend Runtime**: Node.js with Express server + WebSocket broadcasting  
+**Frontend Stack**: React TypeScript SPA with component-based architecture  
+**Communication Layer**: REST API + WebSocket for bidirectional real-time data sync  
+**State Architecture**: Centralized backend state management with WebSocket client synchronization  
 
-**Prerequisites:**
-- [Bun](https://bun.sh) - Fast JavaScript runtime and package manager  
-- Node.js 20+ (for React development)
+## Quick Developer Setup
 
-**Start developing:**
+**One-Command Development Start:**
 ```bash
-bun install              # Install all dependencies
-bun run build           # Build React app for production  
-bun run dev             # SINGLE COMMAND: Runs both backend + frontend in parallel! 🚀
+bun install && bun run dev  # Install deps + start both services
 ```
 
-**Individual service commands:**
+**Development URLs:**
+- **Frontend (dev mode)**: http://localhost:3456 ← Use this for development
+- **Backend API**: http://localhost:3455/api/* ← API endpoints only
+
+**Key Commands:**
 ```bash
-cd backend && bun --watch index.js    # Backend API only (port 3455)
-cd frontend && bun run start         # Frontend dev server (port 3456)
+bun run dev              # Start both backend + frontend (recommended)
+bun run build            # Build production frontend bundle
+bun run test             # Run TypeScript/React tests
+bun run claude:register  # Register current directory as test project
 ```
 
-**🚨 IMPORTANT: Development URLs**
-- **Frontend (with hot reload)**: http://localhost:3456 ← USE THIS FOR DEVELOPMENT
-- **Backend API only**: http://localhost:3455/api/* ← APIs only, NO WEB UI
-
-**Backend port 3455 serves ONLY REST API endpoints, NO static files or web UI.**
-**Frontend port 3456 serves the React app with hot reload and proxies API calls to 3455.**
-
-**Development Workflow:**
+**Project Registration for Testing:**
 ```bash
-# Option 1: Start both services together (recommended)
-bun run dev                          # Starts backend + frontend in parallel
-
-# Option 2: Start services individually 
-cd backend && bun --watch index.js   # Terminal 1: Backend API (3455)
-cd frontend && bun run start        # Terminal 2: Frontend dev (3456)
-
-# Then always use: http://localhost:3456 for development
-```
-
-**Register projects for testing:**
-```bash
-bun run claude:register  # Register current directory
 ./install.sh && source ~/.zshrc  # Install global cm-reg/cm-unreg commands
+cd any-project && cm-reg         # Register project for dashboard
 ```
 
-## Repository Structure
+## Repository Navigation
 
+**Entry Points:**
+- `backend/index.js` - Main server startup
+- `backend/claude-manager.js` - Core ClaudeManager class (main application logic)
+- `frontend/src/App.tsx` - React application root
+
+### Backend Structure (`backend/`)
+
+**Core Files:**
+- `claude-manager.js` - Main application class with Express server, WebSocket, and state management
+- `index.js` - Server entry point and initialization
+- `register-project.js` - Standalone utility for project registration
+
+**Services Layer (`services/`):**
 ```
-backend/                  # Node.js Express backend
-├── index.js              # Main server entry point
-├── claude-manager.js     # ClaudeManager class with Express server
-├── register-project.js   # Standalone project registration utility
-├── services/             # Service modules organized by domain
-│   ├── data/             # Data management services
-│   │   ├── mcp-config-manager.js    # MCP configuration persistence
-│   │   ├── project-registry.js      # Project registration data
-│   │   └── session-data-manager.js  # Session tracking data
-│   ├── operations/       # Business logic operations
-│   │   ├── mcp-operations.js        # MCP server lifecycle operations
-│   │   ├── project-operations.js    # Project management operations
-│   │   └── session-calculator.js    # Session usage calculations
-│   ├── file-watcher.js   # File system monitoring service
-│   ├── mcp-service.js    # MCP server management service
-│   ├── project-service.js# Project configuration service
-│   └── session-service.js# Session tracking service
-├── config/               # Configuration files
-│   └── hooks.js          # Hook system definitions and presets
-└── utils/                # Utility functions
-    ├── env-utils.js      # Environment variable utilities
-    └── path-utils.js     # Path validation utilities
-
-frontend/                 # React TypeScript frontend application
-├── src/
-│   ├── components/       # React components organized by feature
-│   │   ├── Header/       # Header with connection status
-│   │   ├── MCPManagement/# MCP server management component
-│   │   ├── ProjectScope/ # Project-specific management
-│   │   │   ├── ClaudeMdEditor.tsx    # CLAUDE.md file editor
-│   │   │   └── ProjectScope.tsx      # Project scope container
-│   │   ├── ScopeSelector/# User/Project scope switcher
-│   │   └── UserScope/    # User-level configuration
-│   │       ├── EnvVariablesTable.tsx # Environment variable management
-│   │       ├── ProjectRegistration.tsx # Project registration UI
-│   │       ├── UserClaudeMdEditor.tsx  # User-level CLAUDE.md editor
-│   │       ├── UserConfiguration.tsx   # User settings management
-│   │       └── UserScope.tsx          # User scope container
-│   ├── services/         # Frontend services
-│   │   ├── ApiService.ts # HTTP API client with typed methods
-│   │   └── WebSocketService.ts # WebSocket client with reconnection
-│   ├── types.ts          # TypeScript type definitions
-│   └── App.tsx           # Main React application
-├── public/               # React public assets
-└── build/                # Production build output (auto-generated)
-
-bin/
-├── cm-reg                # Global registration command
-└── cm-unreg              # Global unregistration command
-
-examples/                 # Template configuration files
-├── claude-desktop-config.json.example
-├── claude-settings.json.example
-├── project-env.example
-├── registry.json.example
-├── session-tracking.json.example
-├── settings.json.example
-└── user.env.example
-
-install.sh               # Setup script for global commands
+services/
+├── data/                          # Data persistence and storage
+│   ├── project-registry.js       # Manages registered project list
+│   ├── mcp-config-manager.js     # MCP server configuration storage
+│   ├── session-data-manager.js   # Usage tracking data persistence
+│   └── hook-registry.js          # Hook system registration and configuration
+├── operations/                    # Business logic operations  
+│   ├── mcp-operations.js          # MCP server lifecycle (add/remove/enable/disable)
+│   ├── project-operations.js     # Project management operations
+│   ├── session-calculator.js     # Claude Code session usage calculations
+│   ├── hook-executor.js          # Hook system execution engine
+│   └── hook-generator.js         # AI-powered hook creation and templates
+├── integrations/                  # External service integrations
+│   ├── ollama-service.js          # Local Ollama model integration
+│   └── tts-service.js             # Text-to-Speech service integration
+├── agent-service.js               # AI agent creation with OpenRouter integration
+├── mcp-service.js                 # MCP server management and templates
+├── mcp-discovery-service.js       # AI-powered MCP server discovery
+├── hook-event-service.js          # Hook system event handling and dispatch
+├── file-watcher.js                # Real-time file monitoring with chokidar
+├── file-based-hook-loader.js      # Dynamic hook loading from filesystem
+├── project-service.js             # Project configuration management
+├── session-service.js             # Session tracking and monitoring
+├── command-service.js             # Command execution and management
+├── claude-config-reader.js        # Claude configuration file parsing
+└── openrouter-service.js          # OpenRouter API integration for AI features
 ```
 
-## Core Architecture
+### Frontend Structure (`frontend/src/`)
 
-### Backend (backend/claude-manager.js)
+**Component Architecture:**
+```
+components/
+├── Header/                        # Connection status and session tracking toggle
+├── ScopeSelector/                 # User vs Project scope switcher with project dropdown
+├── SessionSidebar/                # Real-time session tracking and usage monitoring
+├── UserScope/                     # User-level management components
+│   ├── ProjectRegistration.tsx   # Register/unregister projects via cm-reg/cm-unreg
+│   ├── AgentCreator.tsx          # AI-powered agent generation with OpenRouter
+│   ├── SlashCommandCreator.tsx   # AI-powered slash command builder
+│   ├── UserConfiguration.tsx     # User-level Claude settings management
+│   ├── UserClaudeMdEditor.tsx    # User-level CLAUDE.md editing
+│   ├── EnvVariablesTable.tsx     # Environment variable management with masking
+│   └── UserScope.tsx             # User scope container component
+├── ProjectScope/                  # Project-specific components
+│   ├── ClaudeMdEditor.tsx        # Project CLAUDE.md editor with Monaco integration
+│   └── ProjectScope.tsx          # Project scope container component
+├── MCPManagement/                 # MCP server management (both scopes)
+├── HookManagement/                # Hook system configuration and management
+├── HookBuilder/                   # Visual hook builder interface
+├── HookEvents/                    # Hook event monitoring and logs
+└── TabNavigation/                 # Tabbed interface navigation
+```
 
-The backend is built around the `ClaudeManager` class which orchestrates all system functionality:
+**Support Files:**
+- `services/ApiService.ts` - HTTP API client with typed methods
+- `services/WebSocketService.ts` - Real-time WebSocket communication
+- `types.ts` - TypeScript interfaces for the entire application
 
-**Core responsibilities:**
-- Project registry and configuration management
-- MCP server lifecycle management (add/remove/enable/disable)
-- Hook system with pre/post-tool execution
-- Real-time session tracking and usage monitoring
-- WebSocket server for live dashboard updates
-- REST API endpoints for all operations
-- File system watching with chokidar for configuration changes
+## Core System Concepts
 
-**Service Architecture:**
-- **Data Layer**: Handles persistence of configurations, registry, and session data
-- **Operations Layer**: Contains business logic for MCP management, project operations, and session calculations
-- **Service Layer**: Provides high-level interfaces for file watching, project management, MCP management, and session tracking
-- **Utilities**: Path validation, environment variable handling
+### How the System Works
 
-### Frontend (frontend/)
+**The Big Picture:**
+1. **Project Registration**: Projects are registered in `~/.claude-manager/registry.json`
+2. **Real-time Monitoring**: File watchers monitor Claude config files in all registered projects
+3. **Centralized State**: All project data is stored in `this.state` object in `claude-manager.js`
+4. **Live Updates**: WebSocket broadcasts changes to all connected browser clients
+5. **Dual Scopes**: Everything operates at either "user-level" (global) or "project-level" (specific project)
 
-The frontend is a React TypeScript application with a component-based architecture optimized for real-time updates:
+### Backend Architecture (`backend/claude-manager.js`)
 
-**Component Hierarchy:**
-- `App.tsx` - Main application container with WebSocket connection management
-- `Header` - Connection status indicator and session tracking toggle
-- `ScopeSelector` - Switch between User and Project views with dynamic project dropdown
-- `UserScope` - Container for user-level management including:
-  - `ProjectRegistration` - Register/unregister projects with validation
-  - `UserConfiguration` - User Claude settings, hooks, and environment variables
-  - `UserClaudeMdEditor` - User-level CLAUDE.md file editing
-  - `EnvVariablesTable` - Environment variable management with masking
-  - `MCPManagement` - User-level MCP servers
-- `ProjectScope` - Project-specific configuration and management including:
-  - `ClaudeMdEditor` - Project CLAUDE.md file editing with live preview
-  - `MCPManagement` - Project-specific MCP servers
+**The ClaudeManager Class** is the heart of the system:
+- Manages Express server (port 3455) and WebSocket server
+- Maintains centralized `this.state` object with all application data
+- Coordinates all services (MCP, projects, sessions, hooks, file watching)
+- Provides REST API endpoints and WebSocket real-time updates
 
-**Services:**
-- `ApiService` - HTTP API communication with typed methods and error handling
-- `WebSocketService` - Real-time updates with connection management, auto-reconnection, and event handling
+**Service Layer Pattern:**
+- **Data Services**: Handle file I/O and persistence (`services/data/`)
+- **Operation Services**: Business logic and core functionality (`services/operations/`)
+- **Integration Services**: External system connections (OpenRouter, Claude CLI)
 
-**State Management:**
-- React hooks for local component state
-- WebSocket for real-time server state synchronization
-- TypeScript interfaces for comprehensive type safety
-- Immutable state updates for predictable rendering
+### Frontend Architecture (`frontend/src/`)
 
-### Key Architectural Patterns
+**React Component Pattern:**
+- **App.tsx**: Main container with WebSocket connection and global state
+- **Scope-Based Organization**: User scope (global settings) vs Project scope (per-project settings)
+- **Real-time Updates**: All components receive live data via WebSocket
+- **TypeScript**: Strict typing with interfaces in `types.ts`
 
-1. **Event-Driven File Monitoring**
-   - `chokidar` watchers monitor Claude config directories
-   - Debounced updates (2-second delay) prevent excessive refreshes
-   - Automatic state refresh on configuration changes
-   - Granular watching of specific files: `.claude/settings.json`, `CLAUDE.md`, user configuration files
+**Component Structure:**
+```
+App.tsx (WebSocket connection + global state)
+├── Header (connection status + session toggle)
+├── ScopeSelector (User vs Project toggle + project dropdown)
+├── UserScope/
+│   ├── ProjectRegistration (cm-reg/cm-unreg interface)
+│   ├── AgentCreator (AI-powered agent generation)
+│   ├── SlashCommandCreator (AI-powered slash commands)
+│   └── EnvVariablesTable (global environment variables)
+└── ProjectScope/
+    ├── ClaudeMdEditor (project-specific CLAUDE.md editing)
+    └── MCPManagement (project-specific MCP servers)
+```
 
-2. **Centralized State Management**
-   - Single `this.state` object contains all application data
-   - JSON persistence to `~/.claude-manager/` directory
-   - Automatic saving on state changes
-   - Immutable state updates for consistency
+**Communication Services:**
+- **ApiService.ts**: HTTP calls to backend API endpoints
+- **WebSocketService.ts**: Real-time data sync with auto-reconnection
 
-3. **Service-Oriented Architecture**
-   - Separation of concerns between data, operations, and service layers
-   - Dependency injection for testability
-   - Clear interfaces between components
+## Key Technical Patterns
 
-4. **WebSocket Real-time Updates**
-   - Broadcasts state changes to connected clients
-   - Live session countdown updates every second
-   - File change notifications
-   - Connection management with automatic reconnection
-   - Event-driven communication pattern
+### 1. Real-time File Monitoring
+**How it works**: `chokidar` watches Claude config files and broadcasts changes via WebSocket
+```javascript
+// Files being watched:
+~/.claude/settings.json           // User Claude settings
+~/.claude-manager/user.env        // Global environment variables
+projectPath/.claude/settings.json // Project Claude settings
+projectPath/CLAUDE.md             // Project instructions
+projectPath/.env                  // Project environment variables
+```
 
-## Development Workflow
+### 2. Dual-Scope Architecture
+**Everything operates at two levels:**
+- **User Scope**: Global settings shared across all projects (`~/.claude-manager/`)
+- **Project Scope**: Project-specific settings (`.claude/`, `CLAUDE.md`, `.env`)
 
-### File Organization Patterns
-
-**Configuration Storage:**
-- User-level: `~/.claude-manager/` (registry, settings, session data)  
-- Project-level: `.claude/settings.json`, `CLAUDE.md`
-- Global commands: `~/.local/bin/cm-reg`, `~/.local/bin/cm-unreg`
-
-**State Object Structure:**
+### 3. Centralized State Object
+**All data lives in one place** (`backend/claude-manager.js`):
 ```javascript
 this.state = {
-  userConfig: {},                    // User Claude settings from ~/.claude/settings.json
-  projects: {},                      // Registered project configs with metadata
-  userEnvVars: {},                   // Global environment variables (~/.claude-manager/user.env)
-  projectEnvVars: {},                // Project-specific env vars (.env files)
-  settings: {},                      // Dashboard preferences and configuration
-  mcps: {                           // MCP server configurations
-    userMCPs: { active: {}, disabled: {} },     // User-level MCP servers
-    projectMCPs: { active: {}, disabled: {} }   // Project-specific MCP servers
+  userConfig: {},           // User's Claude settings
+  projects: {},            // All registered projects
+  userEnvVars: {},         // Global environment variables
+  mcps: {                  // MCP servers (user + project scoped)
+    userMCPs: { active: {}, disabled: {} },
+    projectMCPs: { active: {}, disabled: {} }
   },
-  sessionTracking: {                 // Claude Code usage monitoring data
-    enabled: false,                  // Whether tracking is active
-    currentSessionStart: null,       // Start time of current 5-hour session
-    billingDate: 1,                 // Monthly billing cycle start date
-    monthlySessions: 0,             // Total sessions this billing period
-    sessionHistory: [],             // Historical session data
-    planLimits: {                   // Plan-specific limits
-      pro: 45, maxFive: 225, maxTwenty: 900
-    }
-  },
-  claudeMd: {                       // CLAUDE.md file contents
-    user: '',                       // User-level CLAUDE.md content
-    projects: {}                    // Project-specific CLAUDE.md content
-  }
+  sessionTracking: {},     // Usage monitoring data
+  claudeMd: {}             // CLAUDE.md contents
 }
 ```
 
-### Key Components to Understand
+### 4. WebSocket Live Updates
+**Real-time sync pattern:**
+1. File changes detected by watchers → Update state → Broadcast to all clients
+2. User actions in dashboard → API call → Update state → Broadcast to all clients
+3. Frontend receives WebSocket message → Update React state → Re-render UI
 
-**1. MCP Service (backend/services/mcp-service.js)**
-- Claude CLI command generation (`claude mcp add/remove/enable/disable`)
-- Template system for popular MCP servers (Supabase, Neo4j, Playwright, GitHub, PostgreSQL, Notion, Figma)
-- Environment variable handling, validation, and prompting
-- Active/disabled state management with persistent storage
-- Scope-aware operations (user-level vs project-level)
+## Understanding the System for Development
 
-**2. Hook System (backend/config/hooks.js)**
-- Four hook types: PreToolUse, PostToolUse, Notification, Stop
-- Built-in safety hooks prevent dangerous commands (`rm -rf`, `sudo`)
-- Auto-formatting hooks for multiple languages (Black, Prettier, Go fmt, ESLint, Ruff)
-- Git integration hooks for staging and pushing changes
-- API key exposure prevention
+### Where Things Are Stored
 
-**3. Session Tracking (backend/services/session-service.js)**
-- Monitors `~/.claude/projects/**/*.jsonl` files for session detection
-- Real-time calculation of 5-hour session usage with countdown timer
-- Plan limit awareness (Pro: 45, Max-5x: 225, Max-20x: 900)
-- Monthly usage statistics with configurable billing periods
-- Session history tracking and analytics
-
-**4. File Watchers (backend/services/file-watcher.js)**
-- User-level Claude configs: `~/.claude/settings.json`
-- Project-level configs: `.claude/settings.json`, `CLAUDE.md`
-- Environment variable files: `~/.claude-manager/user.env`, project `.env`
-- Debounced updates to prevent excessive operations
-- Automatic refresh triggers and WebSocket broadcasts
-
-**5. CLAUDE.md Editor (frontend/components/ProjectScope/ClaudeMdEditor.tsx)**
-- Monaco editor integration with markdown syntax highlighting
-- Live preview with real-time rendering
-- Auto-save functionality with debounced updates
-- Dark theme optimized for development
-- WebSocket synchronization for multi-client editing
-
-**6. Environment Variable Management**
-- Masked display of sensitive values in dashboard
-- Copy operations between user and project scopes
-- Real-time validation and error checking
-- Integration with MCP server environment requirements
-
-## API Architecture
-
-### REST Endpoints
-
-**Project Management:**
-- `POST /api/register-project` - Add project to registry with validation
-- `POST /api/unregister-project` - Remove project and cleanup
-- `GET /api/status` - Full system state including all configurations
-
-**Configuration Management:**
-- `POST /api/save-file` - Update settings/CLAUDE.md files with validation
-- `POST /api/add-hook` - Add hook to user settings
-- `GET /api/common-hooks` - Hook presets library organized by category
-- `POST /api/save-claude-md` - Save CLAUDE.md content for user or project scope
-
-**MCP Management:**
-- `GET /api/mcp/templates` - Available MCP server templates with environment requirements
-- `GET /api/mcp/list/:scope` - List MCP servers for user/project scope (active and disabled)
-- `POST /api/mcp/add` - Add new MCP server with template support
-- `POST /api/mcp/remove` - Permanently delete MCP server
-- `POST /api/mcp/disable` - Disable MCP server (move to storage)
-- `POST /api/mcp/enable` - Re-enable disabled MCP server
-
-**Session Tracking:**
-- `POST /api/toggle-session-tracking` - Enable/disable tracking
-- `GET /api/session-stats` - Usage statistics and history
-- `GET /api/countdown` - Active session countdown with time remaining
-
-**Environment Variables:**
-- `POST /api/add-user-env` - Save user-level env var with validation
-- `POST /api/add-env-to-project` - Add env var to project scope
-- `POST /api/copy-env-to-user` - Copy project var to user level
-- `POST /api/remove-env` - Remove environment variable
-
-### WebSocket Events
-
-**Outgoing to client:**
-- Initial connection: Full state object with all configurations
-- `fileChange`: Configuration file updates with change details
-- `sessionTracking`: Session state changes and statistics
-- `sessionCountdown`: Live countdown updates every second
-- `mcpUpdate`: MCP server state changes (add/remove/enable/disable)
-- `claudeMdUpdate`: CLAUDE.md file content changes
-- `envVarUpdate`: Environment variable changes
-
-**Connection Management:**
-- Automatic reconnection on disconnect
-- Heartbeat to maintain connection
-- Error handling and retry logic
-
-## Development Guidelines
-
-### Code Conventions
-
-**File Paths:**
-- Always use absolute paths with `path.join()` and `path.resolve()`
-- Validate paths are within allowed directories using utility functions
-- Use `fs-extra` for enhanced file operations with promise support
-- Consistent path validation in `backend/utils/path-utils.js`
-
-**Error Handling:**
-- Graceful degradation for missing files/directories
-- Structured logging with timestamps to `server.log`
-- Proper HTTP status codes for API responses (200, 400, 404, 500)
-- Client-side error boundaries in React components
-- WebSocket error handling with reconnection logic
-
-**State Management:**
-- Immutable updates to `this.state` object
-- Automatic JSON persistence on changes with atomic writes
-- Debounced file system operations (2-second delay)
-- Type-safe state updates with TypeScript interfaces
-
-**TypeScript Guidelines:**
-- Comprehensive type definitions in `frontend/src/types.ts`
-- Strict TypeScript configuration with type checking
-- Interface-first development for API contracts
-- Proper generic types for reusable components
-
-### Adding New Features
-
-**MCP Template Addition:**
-1. Add template to `this.templates` in `MCPService` constructor with:
-   - Name, description, and command
-   - Required environment variables with descriptions
-   - Optional configuration parameters
-2. Test template creation and environment variable prompting
-3. Ensure proper scope handling (user vs project)
-4. Validate Claude CLI compatibility
-
-**Hook Addition:**  
-1. Add to appropriate category in `COMMON_HOOKS` (backend/config/hooks.js)
-2. Include pattern matching, shell command, and description
-3. Test with various file types and operations
-4. Consider safety implications and add to safety checks if needed
-
-**React Component Addition:**
-1. Create component in appropriate feature directory
-2. Follow existing TypeScript patterns and interfaces
-3. Implement proper error boundaries and loading states
-4. Add CSS modules for styling consistency
-5. Integrate with WebSocket service for real-time updates
-
-**API Endpoint Addition:**
-1. Add route handler in main initialization (claude-manager.js)
-2. Implement proper request validation and sanitization
-3. Update state object using immutable patterns
-4. Broadcast changes via WebSocket to connected clients
-5. Handle errors with appropriate HTTP codes and messages
-6. Add TypeScript types for request/response objects
-
-**Service Layer Addition:**
-1. Create service in appropriate directory (data/operations/services)
-2. Implement dependency injection pattern
-3. Add proper error handling and logging
-4. Create unit tests for business logic
-5. Integrate with file watching if needed
-
-### Testing Strategy
-
-**Manual Testing:**
-- Register multiple projects with different types (Node.js, Python, Rust, etc.)
-- Add and configure MCP servers with various templates
-- Enable session tracking and verify countdown accuracy
-- Test hook execution with different file patterns
-- Verify CLAUDE.md editor functionality with live preview
-- Test environment variable management across scopes
-
-**File Watching:**
-- Modify `.claude/settings.json` files and verify immediate updates
-- Update `CLAUDE.md` files and check editor synchronization
-- Change environment variables and verify masking/display
-- Verify WebSocket broadcasts reach all connected clients
-
-**Frontend Testing:**
-- Test component rendering with various state combinations
-- Verify WebSocket connection management and reconnection
-- Test responsive design across different screen sizes
-- Validate form submissions and error handling
-- Check accessibility compliance
-
-**API Testing:**
-```bash
-# Test project registration
-curl -X POST localhost:3455/api/register-project \
-  -H "Content-Type: application/json" \
-  -d '{"name": "test-project", "path": "/path/to/project"}'
-
-# Test MCP server addition with template
-curl -X POST localhost:3455/api/mcp/add \
-  -H "Content-Type: application/json" \
-  -d '{"scope": "user", "mcpConfig": {"name": "supabase", "command": "npx @supabase/mcp-server", "envVars": {"SUPABASE_URL": "https://test.supabase.co"}}}'
-
-# Test CLAUDE.md content saving
-curl -X POST localhost:3455/api/save-claude-md \
-  -H "Content-Type: application/json" \
-  -d '{"scope": "project", "projectName": "test-project", "content": "# Updated content"}'
-
-# Test system status
-curl localhost:3455/api/status
-
-# Test session tracking toggle
-curl -X POST localhost:3455/api/toggle-session-tracking \
-  -H "Content-Type: application/json" \
-  -d '{"enabled": true}'
+**User-Level Configuration** (`~/.claude-manager/`):
+```
+~/.claude-manager/
+├── registry.json          # List of all registered projects
+├── session-tracking.json  # Claude Code usage data
+├── settings.json          # Dashboard preferences
+└── user.env              # Global environment variables (API keys, etc.)
 ```
 
-**Integration Testing:**
-- End-to-end workflows from project registration to MCP configuration
-- Cross-browser compatibility testing
-- Performance testing with multiple concurrent WebSocket connections
-- File system permission testing on different operating systems
-
-## Security Considerations
-
-**Path Validation:**
-- File access strictly restricted to Claude-related directories only
-- No arbitrary file system access via API endpoints
-- Input sanitization and validation on all user inputs
-- Path traversal attack prevention with strict allow-listing
-- Symbolic link resolution to prevent directory escaping
-
-**Environment Variables:**
-- Sensitive values masked in dashboard display (show only first/last characters)
-- No exposure of secrets in server logs or WebSocket broadcasts
-- Separate user-level and project-level storage with appropriate permissions
-- Environment variable validation before storage
-- Secure handling of API keys and database credentials
-
-**Hook Safety:**
-- Built-in dangerous command detection (`rm -rf`, `sudo`, etc.)
-- API key and secret exposure prevention in code commits
-- File permission validation before executing operations
-- Command injection prevention with proper escaping
-- Whitelist approach for allowed shell commands
-
-**Network Security:**
-- CORS configuration for frontend-backend communication
-- WebSocket origin validation
-- Rate limiting on API endpoints
-- Input validation on all request parameters
-- Secure handling of file uploads and content
-
-**Data Protection:**
-- Local storage only - no external data transmission
-- Proper file permissions on configuration directories
-- Atomic writes to prevent data corruption
-- Backup and recovery mechanisms for critical configuration
-
-## Performance Optimizations
-
-**File System Monitoring:**
-- Debounced updates prevent excessive operations (2-second delay)
-- Efficient chokidar configuration with depth limits and specific file patterns
-- Selective watching of only relevant files (`.claude/settings.json`, `CLAUDE.md`, `.env`)
-- Graceful watcher cleanup on project unregistration
-- Efficient file change detection with minimal CPU usage
-
-**WebSocket Efficiency:**
-- Differential state updates - only broadcast actual changes, not full state
-- Session countdown updates only when tracking is active
-- Connection pooling and proper cleanup on disconnect
-- Message batching for multiple rapid changes
-- Heartbeat mechanism to maintain connection health
-
-**Memory Management:**
-- Lazy loading of project configurations and CLAUDE.md content
-- Automatic cleanup of watchers and timers on project unregistration
-- Efficient JSON serialization/deserialization with streaming for large files
-- Garbage collection-friendly object patterns
-- Memory leak prevention in long-running processes
-
-**Frontend Performance:**
-- React component memoization for expensive renders
-- Debounced input handling in editors and forms
-- Virtual scrolling for large lists (project registry, session history)
-- Code splitting for faster initial load times
-- Efficient WebSocket message handling with batching
-
-**Caching Strategies:**
-- In-memory caching of frequently accessed configuration data
-- Intelligent cache invalidation on file changes
-- Browser caching for static assets
-- Optimized bundle sizes for production builds
-
-## Common Development Tasks
-
-**Debugging file watching issues:**
-1. Check `server.log` for watcher events and error messages
-2. Verify file permissions on watched directories (`~/.claude/`, project directories)
-3. Test debouncing behavior with rapid file changes
-4. Validate WebSocket message broadcasts reach all connected clients
-5. Check for symbolic links that might break watching
-6. Verify chokidar configuration for proper file pattern matching
-
-**Extending session tracking:**
-1. Understand JSONL file format in `~/.claude/projects/` directories
-2. Add new fields to `sessionTracking` state object
-3. Update session calculation logic in `backend/services/operations/session-calculator.js`
-4. Modify frontend components to display new metrics
-5. Test with different Claude Code usage patterns and plan types
-6. Ensure proper handling of timezone differences
-
-**Adding new MCP templates:**
-1. Research MCP server requirements and environment variables
-2. Add template configuration to `MCPService` constructor
-3. Test installation and configuration process
-4. Validate environment variable prompting works correctly
-5. Document template in user-facing materials
-6. Ensure compatibility with Claude CLI commands
-
-**Extending the CLAUDE.md editor:**
-1. Understand Monaco editor configuration and themes
-2. Add new features like auto-completion or custom syntax highlighting
-3. Test real-time synchronization across multiple clients
-4. Ensure proper handling of large files and performance
-5. Add keyboard shortcuts and accessibility features
-6. Validate markdown rendering in preview mode
-
-**Troubleshooting WebSocket issues:**
-1. Check browser developer tools for connection errors
-2. Verify WebSocket server initialization in backend
-3. Test connection handling with network interruptions
-4. Validate message parsing and error handling
-5. Check for memory leaks in long-running connections
-6. Test with multiple concurrent connections
-
-**Performance profiling:**
-1. Use Node.js profiling tools for backend performance
-2. Monitor file system operation costs with large numbers of projects
-3. Profile React component render times
-4. Measure WebSocket message throughput
-5. Analyze memory usage patterns over time
-6. Test with realistic workloads and multiple users
-
-# Development Environment Setup
-
-**Prerequisites:**
-- Node.js 16+ and npm
-- Claude Code CLI installed and configured
-- Git (for project registration and remote URL detection)
-- macOS or Linux (Windows via WSL)
-
-**Quick Setup:**
-```bash
-# Clone and install
-git clone <repository-url>
-cd claude-manager
-bun install              # Install all dependencies with Bun
-
-# Build and start
-bun run build           # Build production frontend
-bun run dev             # Start backend with Bun --watch
-
-# Install global commands (optional)
-./install.sh
-source ~/.zshrc
-
-# Register current project for testing
-bun run claude:register
+**Project-Level Configuration** (each registered project):
+```
+your-project/
+├── .claude/
+│   └── settings.json      # Claude Code settings for this project
+├── .env                   # Project-specific environment variables
+└── CLAUDE.md             # Project instructions and context
 ```
 
-**Development Commands:**
+### Essential Services to Understand
+
+**When debugging or adding features, these are the key services:**
+
+1. **`mcp-service.js`** - Handles MCP server management
+   - Generates Claude CLI commands (`claude mcp add/remove/enable/disable`)
+   - Manages templates for popular MCP servers (Supabase, GitHub, etc.)
+   - Handles environment variable prompting and validation
+
+2. **`file-watcher.js`** - Real-time file monitoring
+   - Uses `chokidar` to watch for file changes in all registered projects
+   - Debounces updates (2-second delay) to prevent spam
+   - Broadcasts changes via WebSocket to frontend
+
+3. **`session-service.js`** - Claude Code usage tracking
+   - Monitors `~/.claude/projects/**/*.jsonl` files for session detection
+   - Calculates real-time usage against plan limits
+   - Provides countdown timer for current 5-hour session
+
+4. **`agent-service.js`** - AI-powered agent generation
+   - Integrates with OpenRouter API for AI text generation
+   - Generates professional Claude agents from natural language descriptions
+   - Creates slash commands and system messages
+
+5. **`hook-event-service.js`** - Hook system orchestration
+   - Manages hook registration, loading, and execution lifecycle
+   - Handles hook event dispatching and error management
+   - Integrates with file-based hook loader for dynamic hook discovery
+
+6. **`mcp-discovery-service.js`** - AI-powered MCP server discovery
+   - Uses AI to find relevant MCP servers based on user descriptions
+   - Provides automatic configuration and setup for discovered servers
+   - Integrates with MCP templates and environment variable management
+
+7. **`openrouter-service.js`** - OpenRouter API integration
+   - Handles authentication and API communication with OpenRouter
+   - Provides consistent interface for AI text generation across the application
+   - Manages rate limiting and error handling for AI-powered features
+
+## Practical Development Guide
+
+### Making Changes to the System
+
+**Adding a New API Endpoint:**
+1. Add route handler in `backend/claude-manager.js` (around line 200+)
+2. Update `this.state` object if needed
+3. Broadcast changes via WebSocket: `this.broadcastToClients()`
+4. Add TypeScript types in `frontend/src/types.ts`
+5. Add API method in `frontend/src/services/ApiService.ts`
+
+**Adding a New React Component:**
+1. Create component in appropriate directory (`components/UserScope/` or `components/ProjectScope/`)
+2. Follow existing patterns (props interface, WebSocket integration)
+3. Import and use in parent component
+4. Add CSS module if styling needed
+
+**Adding a New MCP Template:**
+1. Edit `backend/services/mcp-service.js`
+2. Add template to `this.templates` object in constructor
+3. Include required environment variables and descriptions
+4. Test with actual MCP server installation
+
+### Common Debugging Scenarios
+
+**File Watcher Not Triggering:**
+1. Check `server.log` for chokidar errors
+2. Verify file permissions on watched directories
+3. Ensure debounce isn't hiding rapid changes (2-second delay)
+
+**WebSocket Connection Issues:**
+1. Check browser dev tools Network tab for WebSocket connection
+2. Verify backend WebSocket server is running (port 3455)
+3. Check for CORS issues in browser console
+
+**MCP Servers Not Working:**
+1. Ensure Claude CLI is installed: `which claude`
+2. Check environment variables are set correctly
+3. Test MCP server manually: `npx @supabase/mcp-server --help`
+
+### Code Style and Patterns
+
+**Backend Conventions:**
+- Use `async/await` for asynchronous operations
+- Always use `path.join()` for file paths
+- Handle errors gracefully with try/catch
+- Log important operations to `server.log`
+
+**Frontend Conventions:**
+- Use TypeScript interfaces for all props and data structures
+- Follow React hooks pattern for state management
+- Use CSS modules for component styling
+- Handle loading and error states in components
+
+**File Naming:**
+- Backend services: `kebab-case.js`
+- React components: `PascalCase.tsx`
+- Utilities: `kebab-case.js`
+- Types: `types.ts` (centralized)
+
+## Quick Testing and Development
+
+**Test the System:**
+1. Start the application: `bun run dev`
+2. Register the current project: `bun run claude:register`
+3. Open http://localhost:3456 and switch between User/Project scopes
+4. Test file watching by editing `CLAUDE.md` and watching live updates
+
+**Common Development Commands:**
 ```bash
-# Single command development (recommended)
-bun run dev              # Both backend + frontend in parallel with colored output
-
-# Individual services
-cd backend && bun --watch index.js    # Backend only
-cd frontend && bun run start         # Frontend only
-
-# Production and utilities
-bun run build           # Build production frontend
-bun start               # Start production server
-bun run test            # Run frontend tests
-bun run typecheck       # TypeScript checking
-bun run clean           # Clean all dependencies
-bun run claude:register # Register current project
-
-# Monitoring
-tail -f server.log      # Monitor server logs
+tail -f server.log              # Monitor backend logs
+bun run typecheck              # Check TypeScript errors
+curl localhost:3455/api/status # Test API endpoint
 ```
+
+**Key Files to Edit When Adding Features:**
+- **New API endpoints**: `backend/claude-manager.js`
+- **New React components**: `frontend/src/components/UserScope/` or `ProjectScope/`
+- **New MCP templates**: `backend/services/mcp-service.js`
+- **Type definitions**: `frontend/src/types.ts`
+- **Hook configurations**: `backend/config/hooks.js`
+
+This system is designed for real-time collaboration and management of Claude Code across multiple projects. The key is understanding the dual-scope architecture (user vs project), the centralized state management, and the real-time WebSocket communication pattern.

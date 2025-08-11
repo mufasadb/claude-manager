@@ -26,7 +26,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'Auto-formatting code...' && for file in $CLAUDE_FILE_PATHS; do if [[ '$file' == *.py ]]; then black '$file' && isort '$file'; elif [[ '$file' == *.js || '$file' == *.ts ]]; then npx prettier --write '$file'; elif [[ '$file' == *.go ]]; then gofmt -w '$file'; fi; done"
+            "command": "echo 'Auto-formatting code...' && for file in $CLAUDE_FILE_PATHS; do if [[ '$file' == *.py ]]; then black '$file' && isort '$file'; elif [[ '$file' == *.js || '$file' == *.ts ]]; then bunx prettier --write '$file'; elif [[ '$file' == *.go ]]; then gofmt -w '$file'; fi; done"
           }
         ]
       },
@@ -54,14 +54,14 @@
   },
   "mcpServers": {
     "filesystem": {
-      "command": "npx @modelcontextprotocol/server-filesystem",
+      "command": "bunx @modelcontextprotocol/server-filesystem",
       "args": ["/path/to/your/project"]
     },
     "git": {
-      "command": "npx @modelcontextprotocol/server-git"
+      "command": "bunx @modelcontextprotocol/server-git"
     },
     "fetch": {
-      "command": "npx @modelcontextprotocol/server-fetch"
+      "command": "bunx @modelcontextprotocol/server-fetch"
     }
   },
   "anthropic": {

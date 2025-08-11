@@ -1,6 +1,11 @@
 const COMMON_HOOKS = {
   PreToolUse: [
     {
+      name: 'Log Pre-Tool Event',
+      pattern: '*',
+      command: 'node /Users/danielbeach/Code/claude-manager/experiments/hooks/event-logger.js PreToolUse'
+    },
+    {
       name: 'Prevent Dangerous Commands',
       pattern: 'Bash',
       command: 'echo "Validating command safety..." && if echo "$CLAUDE_TOOL_INPUT" | grep -E "(rm -rf|sudo rm|chmod 777|> /etc/)" > /dev/null; then echo "Dangerous command blocked!" && exit 1; fi'
@@ -27,6 +32,11 @@ const COMMON_HOOKS = {
     }
   ],
   PostToolUse: [
+    {
+      name: 'Log Post-Tool Event',
+      pattern: '*',
+      command: 'node /Users/danielbeach/Code/claude-manager/experiments/hooks/event-logger.js PostToolUse'
+    },
     {
       name: 'Auto Format Code',
       pattern: 'Write|Edit|MultiEdit',
@@ -60,9 +70,14 @@ const COMMON_HOOKS = {
       command: 'osascript -e "display notification \\"$CLAUDE_NOTIFICATION\\" with title \\"Claude Code\\" sound name \\"Glass\\""'
     },
     {
-      name: 'TTS Alert',
+      name: 'Fish Speech TTS Alert',
       pattern: '*',
-      command: 'TEMP_FILE=$(mktemp).wav && curl -s -X POST "http://100.83.40.11:8080/v1/tts" -H "Content-Type: application/json" -d "{\\"text\\": \\"$CLAUDE_NOTIFICATION\\"}" -o "$TEMP_FILE" && afplay "$TEMP_FILE" && rm "$TEMP_FILE"'
+      command: 'TEMP_FILE=$(mktemp).wav && (curl -s --connect-timeout 3 --max-time 10 -X POST "http://100.83.40.11:8080/v1/tts" -H "Content-Type: application/json" -d "{\\"text\\": \\"$CLAUDE_NOTIFICATION\\"}" -o "$TEMP_FILE" && afplay "$TEMP_FILE" && rm "$TEMP_FILE") || say "$CLAUDE_NOTIFICATION"'
+    },
+    {
+      name: 'Permission TTS Notification',
+      pattern: '*',
+      command: 'node /Users/danielbeach/Code/claude-manager/experiments/tts/scripts/permission-notification-hook.js'
     },
     {
       name: 'Slack Notification',
@@ -78,6 +93,23 @@ const COMMON_HOOKS = {
       name: 'Log Notification',
       pattern: '*',
       command: 'echo "$(date): $CLAUDE_NOTIFICATION" >> ~/.claude-notifications.log'
+    }
+  ],
+  UserPromptSubmit: [
+    {
+      name: 'Permission Request TTS',
+      pattern: '*',
+      command: 'CLAUDE_HOOK_EVENT=UserPromptSubmit node /Users/danielbeach/Code/claude-manager/experiments/tts/scripts/permission-notification-hook.js'
+    },
+    {
+      name: 'Permission Request Desktop Alert',
+      pattern: '*',
+      command: 'osascript -e "display notification \\"Claude is requesting permission\\" with title \\"$CLAUDE_PROJECT_NAME\\" sound name \\"Ping\\""'
+    },
+    {
+      name: 'Log Permission Request',
+      pattern: '*',
+      command: 'echo "$(date): Permission request from $CLAUDE_PROJECT_NAME - Tool: $CLAUDE_TOOL_NAME, Files: $CLAUDE_FILE_PATHS" >> ~/.claude-permissions.log'
     }
   ],
   Stop: [

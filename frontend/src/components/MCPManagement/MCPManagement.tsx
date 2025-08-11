@@ -22,6 +22,7 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
   const [mcps, setMcps] = useState<MCPState>({ active: {}, disabled: {} });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<string>('');
   const [formData, setFormData] = useState<MCPFormData>({
@@ -106,6 +107,7 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
     try {
       setLoading(true);
       setError(null);
+      setWarning(null);
       
       await ApiService.addMCP(scope, formData, projectPath);
       
@@ -133,6 +135,7 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
     try {
       setLoadingMCP(name);
       setError(null);
+      setWarning(null);
       
       await ApiService.enableMCP(scope, name, projectPath);
       await loadMCPs();
@@ -147,9 +150,14 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
     try {
       setLoadingMCP(name);
       setError(null);
+      setWarning(null);
       
-      await ApiService.disableMCP(scope, name, projectPath);
+      const result = await ApiService.disableMCP(scope, name, projectPath);
       await loadMCPs();
+      
+      if (result.warning) {
+        setWarning(result.warning);
+      }
     } catch (err) {
       setError(`Failed to disable MCP: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
@@ -165,13 +173,135 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
     try {
       setLoadingMCP(name);
       setError(null);
+      setWarning(null);
       
-      await ApiService.removeMCP(scope, name, projectPath);
+      const result = await ApiService.removeMCP(scope, name, projectPath);
       await loadMCPs();
+      
+      if (result.warning) {
+        setWarning(result.warning);
+      }
     } catch (err) {
       setError(`Failed to remove MCP: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setLoadingMCP(null);
+    }
+  };
+
+  const handleViewLogs = async (name: string) => {
+    try {
+      setError(null);
+      const logsData = await ApiService.getMCPLogs(scope, name, projectPath);
+      
+      if (logsData.success) {
+        // Create a new window/tab to display logs
+        const logWindow = window.open('', '_blank', 'width=1200,height=800,scrollbars=yes');
+        if (logWindow) {
+          const html = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <title>MCP Logs: ${name}</title>
+              <style>
+                body { font-family: 'Monaco', 'Consolas', monospace; padding: 20px; background: #1a1a1a; color: #e0e0e0; }
+                .header { background: #333; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+                .header h1 { margin: 0; color: #4CAF50; }
+                .stats { color: #888; margin-top: 5px; }
+                .debug-section { background: #2a2a2a; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+                .debug-title { color: #FF9800; font-weight: bold; margin-bottom: 10px; }
+                .debug-info { color: #ccc; font-size: 0.9em; margin-bottom: 5px; }
+                .log-entry { background: #2d2d2d; border-left: 4px solid #4CAF50; padding: 15px; margin-bottom: 15px; border-radius: 4px; }
+                .log-header { color: #4CAF50; font-weight: bold; margin-bottom: 8px; }
+                .log-content { color: #e0e0e0; }
+                .timestamp { color: #888; font-size: 0.9em; }
+                .session-id { color: #66B3FF; font-size: 0.9em; }
+                .no-logs { text-align: center; color: #888; padding: 40px; }
+                .no-logs-debug { background: #332a2a; color: #ff9999; padding: 20px; border-radius: 8px; margin: 20px 0; }
+                pre { background: #1a1a1a; padding: 10px; border-radius: 4px; overflow-x: auto; }
+                .json { white-space: pre-wrap; }
+              </style>
+            </head>
+            <body>
+              <div class="header">
+                <h1>📋 MCP Server Logs: ${name}</h1>
+                <div class="stats">
+                  <strong>Scope:</strong> ${logsData.scope} | 
+                  <strong>Project:</strong> ${logsData.projectPath} | 
+                  <strong>Total Logs:</strong> ${logsData.totalFound}
+                </div>
+              </div>
+              
+              ${logsData.debugInfo && logsData.debugInfo.length > 0 ? `
+                <div class="debug-section">
+                  <div class="debug-title">🔍 Debug Information</div>
+                  ${logsData.debugInfo.map(info => `<div class="debug-info">${info}</div>`).join('')}
+                  
+                  ${logsData.searchedDirectories && logsData.searchedDirectories.length > 0 ? `
+                    <div style="margin-top: 10px;">
+                      <strong>Searched Directories:</strong><br>
+                      ${logsData.searchedDirectories.map(dir => `<div class="debug-info">📁 ${dir}</div>`).join('')}
+                    </div>
+                  ` : ''}
+                  
+                  ${logsData.availableMCPs && logsData.availableMCPs.length > 0 ? `
+                    <div style="margin-top: 10px;">
+                      <strong>Available User MCPs:</strong> ${logsData.availableMCPs.join(', ')}
+                    </div>
+                  ` : ''}
+                  
+                  ${logsData.projectMCPs && logsData.projectMCPs.length > 0 ? `
+                    <div style="margin-top: 10px;">
+                      <strong>Project MCPs:</strong> ${logsData.projectMCPs.join(', ')}
+                    </div>
+                  ` : ''}
+                </div>
+              ` : ''}
+              
+              ${logsData.logs.length > 0 ? 
+                logsData.logs.map(log => `
+                  <div class="log-entry">
+                    <div class="log-header">
+                      <span class="timestamp">${new Date(log.timestamp).toLocaleString()}</span> | 
+                      <span class="session-id">Session: ${log.sessionId}</span> | 
+                      <span>Type: ${log.type}</span> |
+                      <span>Source: ${log.source || 'unknown'}</span>
+                    </div>
+                    <div class="log-content">
+                      <pre class="json">${JSON.stringify(log.content, null, 2)}</pre>
+                    </div>
+                  </div>
+                `).join('')
+                : 
+                `<div class="no-logs-debug">
+                   <h3>No logs found for MCP server: ${name}</h3>
+                   <p>This might be because:</p>
+                   <ul>
+                     <li>The MCP server hasn't been used in Claude Code sessions yet</li>
+                     <li>Claude Code is storing logs in a different location than expected</li>
+                     <li>The MCP server name doesn't match what's in the logs</li>
+                     <li>Logs are stored in a different format</li>
+                   </ul>
+                   <p>Check the debug information above for more details.</p>
+                 </div>`
+              }
+              
+              <div style="margin-top: 40px; text-align: center; color: #666;">
+                <p>Primary Log Directory: ${logsData.logDirectory}</p>
+              </div>
+            </body>
+            </html>
+          `;
+          
+          logWindow.document.write(html);
+          logWindow.document.close();
+        } else {
+          setError('Unable to open log window. Please check popup blockers.');
+        }
+      } else {
+        setError('Failed to fetch logs for this MCP server');
+      }
+    } catch (err) {
+      setError(`Failed to view logs: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
 
@@ -242,6 +372,13 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
           </button>
         )}
         <button
+          onClick={() => handleViewLogs(mcp.name)}
+          className="btn-logs"
+          title={`View logs for ${mcp.name}`}
+        >
+          📋 Logs
+        </button>
+        <button
           onClick={() => handleRemoveMCP(mcp.name)}
           disabled={loadingMCP === mcp.name}
           className="btn-delete"
@@ -285,6 +422,7 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
     try {
       setLoading(true);
       setError(null);
+      setWarning(null);
 
       const result = await ApiService.addDiscoveredMCP(scope, discoveryResult.data.template, projectPath);
       
@@ -338,6 +476,13 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
         <div className="error-message">
           {error}
           <button onClick={() => setError(null)} className="close-error">×</button>
+        </div>
+      )}
+
+      {warning && (
+        <div className="warning-message">
+          {warning}
+          <button onClick={() => setWarning(null)} className="close-warning">×</button>
         </div>
       )}
 

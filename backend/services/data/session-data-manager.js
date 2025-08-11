@@ -17,6 +17,35 @@ class SessionDataManager {
     };
   }
 
+  // Session timing utilities
+  calculateSessionEndTime(sessionStartTime) {
+    const startTime = new Date(sessionStartTime);
+    
+    // Find the next full hour after the session started
+    const nextHour = new Date(startTime);
+    nextHour.setHours(startTime.getHours() + 1);
+    nextHour.setMinutes(0);
+    nextHour.setSeconds(0);
+    nextHour.setMilliseconds(0);
+    
+    // Add 4 hours to the next full hour
+    const sessionEnd = new Date(nextHour.getTime() + (4 * 60 * 60 * 1000));
+    
+    return sessionEnd.getTime();
+  }
+
+  isSessionActiveAtTime(sessionStartTime, currentTime = Date.now()) {
+    if (!sessionStartTime) return false;
+    const sessionEndTime = this.calculateSessionEndTime(sessionStartTime);
+    return currentTime <= sessionEndTime;
+  }
+
+  getSessionTimeRemaining(sessionStartTime, currentTime = Date.now()) {
+    if (!sessionStartTime) return 0;
+    const sessionEndTime = this.calculateSessionEndTime(sessionStartTime);
+    return Math.max(0, sessionEndTime - currentTime);
+  }
+
   async init() {
     await fs.ensureDir(this.registryPath);
     await this.load();
@@ -117,9 +146,7 @@ class SessionDataManager {
 
     // Calculate time remaining in current session if active
     if (this.state.enabled && this.state.currentSessionStart) {
-      const sessionStart = new Date(this.state.currentSessionStart);
-      const sessionEnd = new Date(sessionStart.getTime() + (5 * 60 * 60 * 1000)); // 5 hours
-      const remaining = Math.max(0, sessionEnd.getTime() - now.getTime());
+      const remaining = this.getSessionTimeRemaining(this.state.currentSessionStart, now.getTime());
       
       stats.timeRemaining = {
         milliseconds: remaining,
@@ -139,13 +166,12 @@ class SessionDataManager {
     
     const now = Date.now();
     const sessionStart = this.state.currentSessionStart;
-    const sessionEnd = sessionStart + (5 * 60 * 60 * 1000);
     
-    if (now > sessionEnd) return null;
+    if (!this.isSessionActiveAtTime(sessionStart, now)) return null;
     
     return {
       start: sessionStart,
-      remaining: sessionEnd - now
+      remaining: this.getSessionTimeRemaining(sessionStart, now)
     };
   }
 
@@ -154,9 +180,7 @@ class SessionDataManager {
     if (!this.state.currentSessionStart) return false;
     
     const now = Date.now();
-    const sessionEnd = this.state.currentSessionStart + (5 * 60 * 60 * 1000);
-    
-    return now <= sessionEnd;
+    return this.isSessionActiveAtTime(this.state.currentSessionStart, now);
   }
 
   // Reset methods

@@ -146,6 +146,11 @@ export interface SlashCommandCreationResult {
   suggestedCategory?: string;
 }
 
+export interface MCPOperationResult {
+  success: boolean;
+  warning?: string;
+}
+
 export interface Agent {
   name: string;
   description: string;

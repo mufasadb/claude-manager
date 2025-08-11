@@ -12,6 +12,35 @@ class SessionCalculator {
     this.onSessionCountdown = null;
   }
 
+  // Session timing utilities
+  calculateSessionEndTime(sessionStartTime) {
+    const startTime = new Date(sessionStartTime);
+    
+    // Find the next full hour after the session started
+    const nextHour = new Date(startTime);
+    nextHour.setHours(startTime.getHours() + 1);
+    nextHour.setMinutes(0);
+    nextHour.setSeconds(0);
+    nextHour.setMilliseconds(0);
+    
+    // Add 4 hours to the next full hour
+    const sessionEnd = new Date(nextHour.getTime() + (4 * 60 * 60 * 1000));
+    
+    return sessionEnd.getTime();
+  }
+
+  isSessionActive(sessionStartTime, currentTime = Date.now()) {
+    if (!sessionStartTime) return false;
+    const sessionEndTime = this.calculateSessionEndTime(sessionStartTime);
+    return currentTime <= sessionEndTime;
+  }
+
+  getSessionTimeRemaining(sessionStartTime, currentTime = Date.now()) {
+    if (!sessionStartTime) return 0;
+    const sessionEndTime = this.calculateSessionEndTime(sessionStartTime);
+    return Math.max(0, sessionEndTime - currentTime);
+  }
+
   // File parsing operations
   async parseJSONLFile(filePath) {
     try {
@@ -167,8 +196,8 @@ class SessionCalculator {
       
       // Start new session if:
       // 1. No current session
-      // 2. More than 5 hours since last activity
-      if (!currentSessionStart || (messageTime.getTime() - currentSessionStart.getTime()) > (5 * 60 * 60 * 1000)) {
+      // 2. Message falls outside current session window (next hour + 4 hours)
+      if (!currentSessionStart || !this.isSessionActive(currentSessionStart.getTime(), messageTime.getTime())) {
         // Save previous session
         if (currentSessionData) {
           sessions.push(currentSessionData);
@@ -242,8 +271,7 @@ class SessionCalculator {
     let activeSession = null;
     
     for (const session of sessions) {
-      const sessionEnd = session.end + (5 * 60 * 60 * 1000); // 5 hours after last activity
-      if (now <= sessionEnd) {
+      if (this.isSessionActive(session.start, now)) {
         // Keep the most recent active session
         if (!activeSession || session.end > activeSession.end) {
           activeSession = session;
@@ -259,8 +287,7 @@ class SessionCalculator {
     if (!sessionStart) return null;
 
     const now = Date.now();
-    const sessionEnd = sessionStart + (5 * 60 * 60 * 1000); // 5 hours
-    const remaining = Math.max(0, sessionEnd - now);
+    const remaining = this.getSessionTimeRemaining(sessionStart, now);
 
     return {
       totalMs: remaining,

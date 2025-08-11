@@ -148,10 +148,11 @@ class ClaudeManager {
       }
     });
 
-    // Register project hooks for existing projects
+    // Register project hooks for existing projects with both systems
     const projects = this.projectService.getProjects();
     for (const [projectName, project] of Object.entries(projects)) {
       await this.hookRegistry.loadProjectHooks(projectName, project.path);
+      await this.hookEventService.registerProject(projectName, project.path);
     }
 
     // Set up hook event broadcasting
@@ -480,6 +481,19 @@ class ClaudeManager {
   setupWebServer() {
     this.app.use(express.json({ limit: '50mb' }));
     
+    // Enable CORS for development - frontend on port 3456, backend on 3455
+    this.app.use((req, res, next) => {
+      res.header('Access-Control-Allow-Origin', 'http://localhost:3456');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.header('Access-Control-Allow-Credentials', 'true');
+      
+      if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+      }
+      next();
+    });
+    
     // Backend serves ONLY REST API - no static files
     // Frontend dev server runs on port 3456 for development
     
@@ -638,6 +652,11 @@ class ClaudeManager {
       try {
         const { name, path: projectPath } = req.body;
         const result = await this.projectService.registerProject(name, projectPath);
+        
+        // Register with both hook systems
+        await this.hookRegistry.loadProjectHooks(name, projectPath);
+        await this.hookEventService.registerProject(name, projectPath);
+        
         this.fileWatcher.updateProjectWatchers(this.projectService.getProjects());
         res.json({ success: true, project: result });
       } catch (error) {
@@ -648,7 +667,17 @@ class ClaudeManager {
     this.app.post('/api/unregister-project', async (req, res) => {
       try {
         const { name } = req.body;
+        const project = this.projectService.getProject(name);
+        const projectPath = project?.path;
+        
         const result = await this.projectService.unregisterProject(name);
+        
+        // Unregister from both hook systems
+        await this.hookRegistry.unregisterProject(name);
+        if (projectPath) {
+          await this.hookEventService.unregisterProject(name, projectPath);
+        }
+        
         this.fileWatcher.updateProjectWatchers(this.projectService.getProjects());
         res.json(result);
       } catch (error) {
@@ -924,8 +953,7 @@ class ClaudeManager {
           
           // Current session is the most recent active one
           const activeSession = sessions.find(session => {
-            const sessionEnd = session.end + (5 * 60 * 60 * 1000); // 5 hours after last activity
-            return now <= sessionEnd;
+            return this.sessionService.isSessionActive(session.start, now);
           });
           
           if (activeSession) {
@@ -944,8 +972,7 @@ class ClaudeManager {
           
           // Previous session is the one before current
           const completedSessions = sessions.filter(session => {
-            const sessionEnd = session.end + (5 * 60 * 60 * 1000);
-            return now > sessionEnd;
+            return !this.sessionService.isSessionActive(session.start, now);
           }).sort((a, b) => b.end - a.end);
           
           if (completedSessions.length > 0) {
@@ -1092,7 +1119,7 @@ class ClaudeManager {
           messageCount: session.messageCount,
           tokens: session.tokens,
           duration: Math.round((session.end - session.start) / (60 * 1000)) + 'min',
-          isActive: Date.now() <= (session.end + (5 * 60 * 60 * 1000))
+          isActive: this.sessionService.isSessionActive(session.start)
         }));
 
         res.json({
@@ -1185,7 +1212,12 @@ class ClaudeManager {
         this.state.mcps = this.mcpService.getState();
         this.broadcastToClients({ type: 'mcpUpdate', mcps: this.state.mcps });
         
-        res.json(result);
+        // Include warning in response if present
+        if (result.warning) {
+          res.json({ success: true, warning: result.warning });
+        } else {
+          res.json(result);
+        }
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
@@ -1200,7 +1232,12 @@ class ClaudeManager {
         this.state.mcps = this.mcpService.getState();
         this.broadcastToClients({ type: 'mcpUpdate', mcps: this.state.mcps });
         
-        res.json(result);
+        // Include warning in response if present
+        if (result.warning) {
+          res.json({ success: true, warning: result.warning });
+        } else {
+          res.json(result);
+        }
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
@@ -1284,6 +1321,126 @@ class ClaudeManager {
         });
       } catch (error) {
         console.error('Failed to add discovered MCP:', error);
+        res.status(500).json({ 
+          success: false, 
+          error: error.message 
+        });
+      }
+    });
+
+    // MCP Logs Endpoint
+    this.app.get('/api/mcp/logs/:scope/:mcpName', async (req, res) => {
+      try {
+        const { scope, mcpName } = req.params;
+        const { projectPath } = req.query;
+        
+        // Get the project path for this MCP server
+        let searchPath = '';
+        if (scope === 'project' && projectPath) {
+          searchPath = projectPath;
+        } else {
+          // For user scope, we need to find projects that use this MCP
+          const projects = this.projectService.getProjects();
+          searchPath = Object.values(projects)[0]?.path || process.cwd();
+        }
+        
+        let logs = [];
+        let debugInfo = [];
+        let searchedDirectories = [];
+        
+        // Multiple possible log locations for Claude Code
+        const possibleLogDirs = [
+          // Original location
+          path.join(os.homedir(), '.claude', 'projects', searchPath.replace(/\//g, '-').replace(/^-/, '')),
+          // Alternative location based on project hash or different naming
+          path.join(os.homedir(), '.claude', 'projects', path.basename(searchPath)),
+          // Session logs directory
+          path.join(os.homedir(), '.claude', 'sessions'),
+          // Direct projects folder scan
+          path.join(os.homedir(), '.claude', 'projects'),
+          // Local project logs
+          path.join(searchPath, '.claude', 'logs'),
+          // Claude cache directory
+          path.join(os.homedir(), '.claude', 'cache'),
+          // Temp or system logs
+          path.join(os.tmpdir(), 'claude-logs')
+        ];
+        
+        // Check for logs in all possible directories
+        for (const logDir of possibleLogDirs) {
+          try {
+            if (await fs.pathExists(logDir)) {
+              searchedDirectories.push(logDir);
+              debugInfo.push(`Found directory: ${logDir}`);
+              
+              const entries = await fs.readdir(logDir, { withFileTypes: true });
+              
+              // Check for direct .jsonl files
+              const jsonlFiles = entries
+                .filter(entry => entry.isFile() && entry.name.endsWith('.jsonl'))
+                .map(entry => entry.name)
+                .sort((a, b) => b.localeCompare(a)) // Most recent first
+                .slice(0, 20); // Check more files
+              
+              // Also check subdirectories
+              const subDirs = entries
+                .filter(entry => entry.isDirectory())
+                .map(entry => entry.name);
+              
+              debugInfo.push(`Directory ${logDir} - Files: ${jsonlFiles.length}, Subdirs: ${subDirs.length}`);
+              
+              // Process direct files
+              for (const file of jsonlFiles) {
+                const filePath = path.join(logDir, file);
+                await this.processLogFile(filePath, file, mcpName, logs, debugInfo);
+              }
+              
+              // Process subdirectories (for nested project structure)
+              for (const subDir of subDirs.slice(0, 10)) { // Limit subdirs to avoid performance issues
+                const subDirPath = path.join(logDir, subDir);
+                try {
+                  const subEntries = await fs.readdir(subDirPath, { withFileTypes: true });
+                  const subJsonlFiles = subEntries
+                    .filter(entry => entry.isFile() && entry.name.endsWith('.jsonl'))
+                    .map(entry => entry.name)
+                    .sort((a, b) => b.localeCompare(a))
+                    .slice(0, 10);
+                  
+                  for (const file of subJsonlFiles) {
+                    const filePath = path.join(subDirPath, file);
+                    await this.processLogFile(filePath, file, mcpName, logs, debugInfo);
+                  }
+                } catch (subError) {
+                  debugInfo.push(`Error reading subdirectory ${subDir}: ${subError.message}`);
+                }
+              }
+            } else {
+              debugInfo.push(`Directory not found: ${logDir}`);
+            }
+          } catch (dirError) {
+            debugInfo.push(`Error accessing directory ${logDir}: ${dirError.message}`);
+          }
+        }
+        
+        // Sort by timestamp descending (most recent first)
+        logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        
+        res.json({
+          success: true,
+          mcpName,
+          scope,
+          projectPath: searchPath,
+          logs: logs.slice(0, 100), // Limit to 100 entries
+          totalFound: logs.length,
+          logDirectory: searchedDirectories[0] || possibleLogDirs[0],
+          searchedDirectories,
+          debugInfo,
+          availableMCPs: Object.keys(this.state.mcps?.userMCPs?.active || {}),
+          projectMCPs: Object.keys(this.state.mcps?.projectMCPs?.active || {})
+        });
+        
+      } catch (error) {
+        console.error('Failed to fetch MCP logs:', error);
         res.status(500).json({ 
           success: false, 
           error: error.message 
@@ -1577,14 +1734,21 @@ class ClaudeManager {
       }
     });
 
-    // List hooks
+    // List hooks (supports both registry and file-based systems)
     this.app.get('/api/hooks/list/:scope', async (req, res) => {
       try {
         const { scope } = req.params;
         const { projectName } = req.query;
         
-        const hooks = this.hookRegistry.getHooks(scope, projectName);
-        res.json({ hooks, scope, projectName });
+        let hooks;
+        if (this.hookEventService.useFileBasedHooks) {
+          const projectPath = projectName ? this.projectService.getProject(projectName)?.path : null;
+          hooks = this.hookEventService.fileBasedHooks.getHooks(scope, projectPath);
+        } else {
+          hooks = this.hookRegistry.getHooks(scope, projectName);
+        }
+        
+        res.json({ hooks, scope, projectName, useFileBasedHooks: this.hookEventService.useFileBasedHooks });
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
@@ -1712,8 +1876,174 @@ class ClaudeManager {
       }
     });
 
+    // === FILE-BASED HOOK MANAGEMENT ENDPOINTS ===
+    
+    // Create hook file from template
+    this.app.post('/api/hooks-files/create', async (req, res) => {
+      try {
+        const { scope, projectName, filename, template } = req.body;
+        
+        if (!filename || !template || !scope) {
+          return res.status(400).json({ error: 'Missing required fields' });
+        }
+        
+        const projectPath = projectName ? this.projectService.getProject(projectName)?.path : null;
+        const filePath = await this.hookEventService.fileBasedHooks.createHookFromTemplate(
+          scope, projectPath, filename, template
+        );
+        
+        this.broadcastState();
+        res.json({ success: true, filePath, filename });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+    
+    // Update hook file content
+    this.app.put('/api/hooks-files/update', async (req, res) => {
+      try {
+        const { scope, projectName, filename, content } = req.body;
+        
+        if (!filename || !content || !scope) {
+          return res.status(400).json({ error: 'Missing required fields' });
+        }
+        
+        const projectPath = projectName ? this.projectService.getProject(projectName)?.path : null;
+        await this.hookEventService.fileBasedHooks.updateHookFile(
+          scope, projectPath, filename, content
+        );
+        
+        this.broadcastState();
+        res.json({ success: true, filename });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+    
+    // Enable hook (move from disabled directory)
+    this.app.post('/api/hooks-files/enable', async (req, res) => {
+      try {
+        const { scope, projectName, filename } = req.body;
+        
+        if (!filename || !scope) {
+          return res.status(400).json({ error: 'Missing required fields' });
+        }
+        
+        const projectPath = projectName ? this.projectService.getProject(projectName)?.path : null;
+        await this.hookEventService.fileBasedHooks.enableHook(scope, projectPath, filename);
+        
+        this.broadcastState();
+        res.json({ success: true, filename, enabled: true });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+    
+    // Disable hook (move to disabled directory)
+    this.app.post('/api/hooks-files/disable', async (req, res) => {
+      try {
+        const { scope, projectName, filename } = req.body;
+        
+        if (!filename || !scope) {
+          return res.status(400).json({ error: 'Missing required fields' });
+        }
+        
+        const projectPath = projectName ? this.projectService.getProject(projectName)?.path : null;
+        await this.hookEventService.fileBasedHooks.disableHook(scope, projectPath, filename);
+        
+        this.broadcastState();
+        res.json({ success: true, filename, enabled: false });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+    
+    // Delete hook file permanently
+    this.app.delete('/api/hooks-files/delete', async (req, res) => {
+      try {
+        const { scope, projectName, filename } = req.body;
+        
+        if (!filename || !scope) {
+          return res.status(400).json({ error: 'Missing required fields' });
+        }
+        
+        const projectPath = projectName ? this.projectService.getProject(projectName)?.path : null;
+        await this.hookEventService.fileBasedHooks.deleteHook(scope, projectPath, filename);
+        
+        this.broadcastState();
+        res.json({ success: true, filename, deleted: true });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
     // Get hook templates
     this.app.get('/api/hooks/templates', (req, res) => {
+      try {
+        const HookTemplates = require('./services/hook-templates');
+        const templates = HookTemplates.getAllTemplates();
+        const categories = HookTemplates.getCategories();
+        
+        res.json({ templates, categories });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+    
+    // Get templates by category
+    this.app.get('/api/hooks/templates/category/:category', (req, res) => {
+      try {
+        const HookTemplates = require('./services/hook-templates');
+        const { category } = req.params;
+        const templates = HookTemplates.getTemplatesByCategory(category);
+        
+        res.json({ templates, category });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+    
+    // Create hook from template
+    this.app.post('/api/hooks/create-from-template', async (req, res) => {
+      try {
+        const HookTemplates = require('./services/hook-templates');
+        const { templateKey, scope, projectName, customName, variables } = req.body;
+        
+        if (!templateKey || !scope) {
+          return res.status(400).json({ error: 'Missing required fields' });
+        }
+        
+        const template = HookTemplates.getTemplate(templateKey);
+        if (!template) {
+          return res.status(404).json({ error: 'Template not found' });
+        }
+        
+        // Generate filename
+        const filename = HookTemplates.generateFilename(templateKey, customName);
+        
+        // Customize template with variables
+        const customizedTemplate = HookTemplates.customizeTemplate(template, variables);
+        
+        // Create hook file
+        const projectPath = projectName ? this.projectService.getProject(projectName)?.path : null;
+        const filePath = await this.hookEventService.fileBasedHooks.createHookFromTemplate(
+          scope, projectPath, filename, customizedTemplate
+        );
+        
+        this.broadcastState();
+        res.json({ 
+          success: true, 
+          filename, 
+          filePath,
+          template: template.name 
+        });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Legacy templates endpoint (keeping for backward compatibility)
+    this.app.get('/api/hooks/legacy-templates', (req, res) => {
       try {
         const templates = {
           'tts-notification': {
@@ -1904,6 +2234,9 @@ try {
       userEnvVars: this.state.userEnvVars,
       settings: this.state.settings,
       
+      // MCP state
+      mcps: this.state.mcps,
+      
       // Service states
       projects: projectState.projects,
       projectEnvVars: projectState.projectEnvVars,
@@ -1939,6 +2272,65 @@ try {
     }
     
     console.log('Claude Manager stopped');
+  }
+
+  // Helper method to process individual log files for MCP logs
+  async processLogFile(filePath, fileName, mcpName, logs, debugInfo) {
+    try {
+      const content = await fs.readFile(filePath, 'utf8');
+      const lines = content.trim().split('\n').filter(line => line.trim());
+      
+      debugInfo.push(`Processing file ${fileName}: ${lines.length} lines`);
+      
+      for (const line of lines) {
+        try {
+          const logEntry = JSON.parse(line);
+          
+          // More comprehensive MCP detection
+          const entryJson = JSON.stringify(logEntry).toLowerCase();
+          const mcpNameLower = mcpName.toLowerCase();
+          
+          let isRelevantEntry = false;
+          
+          // Check various ways MCP might be referenced in logs
+          if (
+            // Tool use with MCP name
+            (logEntry.tool_use && (
+              logEntry.tool_use.name?.toLowerCase().includes(mcpNameLower) ||
+              logEntry.tool_use.function?.toLowerCase().includes(mcpNameLower)
+            )) ||
+            // Content mentions MCP
+            (logEntry.content && logEntry.content.toLowerCase().includes(mcpNameLower)) ||
+            // Tool results or responses
+            (logEntry.tool_result && entryJson.includes(mcpNameLower)) ||
+            // Message content
+            (logEntry.message && entryJson.includes(mcpNameLower)) ||
+            // Any field containing the MCP name
+            entryJson.includes(mcpNameLower) ||
+            // MCP server protocol references
+            entryJson.includes('mcp') && entryJson.includes(mcpNameLower)
+          ) {
+            isRelevantEntry = true;
+          }
+          
+          if (isRelevantEntry) {
+            logs.push({
+              timestamp: logEntry.timestamp || new Date().toISOString(),
+              sessionId: fileName.split('.')[0],
+              type: logEntry.type || logEntry.role || 'log_entry',
+              content: logEntry,
+              file: fileName,
+              source: 'claude_session'
+            });
+            debugInfo.push(`Found relevant entry in ${fileName} for ${mcpName}`);
+          }
+        } catch (parseError) {
+          // Skip invalid JSON lines but don't spam debug
+        }
+      }
+    } catch (fileError) {
+      debugInfo.push(`Error reading log file ${fileName}: ${fileError.message}`);
+    }
   }
 }
 

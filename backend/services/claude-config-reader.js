@@ -1,4 +1,4 @@
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 const { promisify } = require('util');
 const fs = require('fs-extra');
 const path = require('path');
@@ -11,13 +11,64 @@ class ClaudeConfigReader {
     this.claudeConfigPath = path.join(os.homedir(), '.claude');
   }
 
+  async runClaudeMcpListWithPty() {
+    return new Promise((resolve, reject) => {
+      // Try to use node-pty if available, otherwise fall back to regular spawn
+      try {
+        const pty = require('node-pty');
+        const ptyProcess = pty.spawn('claude', ['mcp', 'list'], {
+          name: 'xterm-color',
+          cols: 80,
+          rows: 24,
+          cwd: process.cwd(),
+          env: process.env
+        });
+
+        let output = '';
+        ptyProcess.onData((data) => {
+          output += data;
+        });
+
+        ptyProcess.onExit(() => {
+          resolve(output);
+        });
+
+      } catch (error) {
+        // Fall back to regular exec if node-pty is not available
+        console.log('node-pty not available, falling back to regular exec with forced TTY');
+        const child = spawn('claude', ['mcp', 'list'], { 
+          stdio: 'pipe',
+          env: { ...process.env, FORCE_COLOR: '1' }
+        });
+
+        let output = '';
+        child.stdout.on('data', (data) => {
+          output += data.toString();
+        });
+        
+        child.stderr.on('data', (data) => {
+          output += data.toString();
+        });
+
+        child.on('close', (code) => {
+          resolve(output);
+        });
+
+        child.on('error', (err) => {
+          reject(err);
+        });
+      }
+    });
+  }
+
   async getActualMCPConfiguration() {
     try {
-      // Get the raw MCP list from Claude (this shows only working MCPs)
-      const { stdout } = await execAsync('claude mcp list');
+      // First get the list of server names from claude mcp list
+      const { stdout: listOutput } = await execAsync('claude mcp list');
+      console.log('DEBUG: claude mcp list output:', listOutput);
       
-      // Parse the actual MCPs from the output  
-      const mcpLines = stdout.split('\n').filter(line => 
+      // Parse server names from the basic list
+      const mcpLines = listOutput.split('\n').filter(line => 
         line.trim() && 
         line.includes(':') && 
         (line.includes('npx') || line.includes('node')) &&
@@ -27,11 +78,29 @@ class ClaudeConfigReader {
       const actualMCPs = {};
       const workingMCPNames = new Set();
       
+      // For each server, get detailed status using claude mcp get
       for (const line of mcpLines) {
-        const mcp = this.parseMCPLine(line);
-        if (mcp) {
-          actualMCPs[mcp.name] = mcp;
-          workingMCPNames.add(mcp.name);
+        const basicMcp = this.parseMCPLine(line);
+        if (basicMcp) {
+          try {
+            // Get detailed info including health status
+            const { stdout: detailOutput } = await execAsync(`claude mcp get "${basicMcp.name}"`);
+            console.log(`DEBUG: claude mcp get ${basicMcp.name} output:`, detailOutput);
+            const detailedMcp = this.parseMCPGetOutput(basicMcp.name, detailOutput);
+            console.log(`DEBUG: parsed MCP ${basicMcp.name}:`, detailedMcp);
+            if (detailedMcp) {
+              // Since Claude Code hides health status in non-interactive mode,
+              // mark as 'configured' instead of 'unknown' to indicate it exists
+              detailedMcp.status = 'configured';
+              detailedMcp.statusMessage = 'Server configured (health status only available in interactive mode)';
+              actualMCPs[detailedMcp.name] = detailedMcp;
+              workingMCPNames.add(detailedMcp.name);
+            }
+          } catch (error) {
+            console.warn(`Failed to get details for MCP ${basicMcp.name}:`, error.message);
+            // Fall back to basic info
+            actualMCPs[basicMcp.name] = basicMcp;
+          }
         }
       }
 
@@ -82,6 +151,58 @@ class ClaudeConfigReader {
         staleCount: 0
       };
     }
+  }
+
+  parseMCPGetOutput(serverName, output) {
+    // Parse output from claude mcp get <name>
+    // Example:
+    // context7:
+    //   Scope: User config (available in all your projects)
+    //   Status: ✓ Connected
+    //   Type: stdio
+    //   Command: npx
+    //   Args: -y @upstash/context7-mcp
+    //   Environment:
+    
+    const lines = output.split('\n');
+    let status = 'unknown';
+    let statusMessage = '';
+    let command = '';
+    let args = [];
+    let transport = 'stdio';
+    let env = {};
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('Status:')) {
+        const statusLine = trimmed.replace('Status:', '').trim();
+        if (statusLine.includes('✓ Connected')) {
+          status = 'connected';
+          statusMessage = 'Connected';
+        } else if (statusLine.includes('✗ Failed')) {
+          status = 'failed';
+          statusMessage = statusLine.replace('✗', '').trim();
+        }
+      } else if (trimmed.startsWith('Command:')) {
+        command = trimmed.replace('Command:', '').trim();
+      } else if (trimmed.startsWith('Args:')) {
+        const argsLine = trimmed.replace('Args:', '').trim();
+        args = argsLine ? argsLine.split(/\s+/) : [];
+      } else if (trimmed.startsWith('Type:')) {
+        transport = trimmed.replace('Type:', '').trim();
+      }
+    }
+    
+    return {
+      name: serverName,
+      command,
+      args,
+      env,
+      transport,
+      status,
+      statusMessage,
+      source: 'claude_mcp_get'
+    };
   }
 
   parseMCPLine(line) {

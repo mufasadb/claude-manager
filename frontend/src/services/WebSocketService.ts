@@ -17,7 +17,7 @@ export class WebSocketService {
   private static reconnectInterval = 3000;
 
   static connect(onMessage: MessageHandler): void {
-    const wsUrl = `ws://${window.location.host}`;
+    const wsUrl = `ws://localhost:3455/ws`;
 
     this.messageHandlers.push(onMessage);
     

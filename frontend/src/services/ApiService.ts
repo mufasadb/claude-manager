@@ -1,6 +1,6 @@
-import { AppState, Hook, MCPTemplate, MCPState, SessionCountdown, SessionStats, SlashCommandFormData, SlashCommandCreationResult, SlashCommand, AgentFormData, AgentCreationResult, Agent, AgentTemplate } from '../types';
+import { AppState, Hook, MCPTemplate, MCPState, SessionCountdown, SessionStats, SlashCommandFormData, SlashCommandCreationResult, SlashCommand, AgentFormData, AgentCreationResult, Agent, AgentTemplate, MCPOperationResult } from '../types';
 
-const API_BASE = '';
+const API_BASE = 'http://localhost:3455';
 
 export class ApiService {
   static async getStatus(): Promise<AppState> {
@@ -268,7 +268,7 @@ export class ApiService {
     scope: 'user' | 'project',
     name: string,
     projectPath?: string
-  ): Promise<{ success: boolean }> {
+  ): Promise<MCPOperationResult> {
     const response = await fetch(`${API_BASE}/api/mcp/remove`, {
       method: 'POST',
       headers: {
@@ -287,7 +287,7 @@ export class ApiService {
     scope: 'user' | 'project',
     name: string,
     projectPath?: string
-  ): Promise<{ success: boolean }> {
+  ): Promise<MCPOperationResult> {
     const response = await fetch(`${API_BASE}/api/mcp/disable`, {
       method: 'POST',
       headers: {
@@ -317,6 +317,44 @@ export class ApiService {
     if (!response.ok) {
       const errorData = await response.json();
       throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  static async getMCPLogs(
+    scope: 'user' | 'project',
+    mcpName: string,
+    projectPath?: string
+  ): Promise<{
+    success: boolean;
+    mcpName: string;
+    scope: string;
+    projectPath: string;
+    logs: Array<{
+      timestamp: string;
+      sessionId: string;
+      type: string;
+      content: any;
+      file: string;
+      source?: string;
+    }>;
+    totalFound: number;
+    logDirectory: string;
+    searchedDirectories?: string[];
+    debugInfo?: string[];
+    availableMCPs?: string[];
+    projectMCPs?: string[];
+  }> {
+    const queryParams = new URLSearchParams();
+    if (projectPath) {
+      queryParams.set('projectPath', projectPath);
+    }
+    
+    const response = await fetch(
+      `${API_BASE}/api/mcp/logs/${scope}/${encodeURIComponent(mcpName)}?${queryParams}`
+    );
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
     return response.json();
   }

@@ -119,6 +119,54 @@ if [ ! -f "$REGISTRY_FILE" ]; then
     log_success "Projects registry created"
 fi
 
+# Install hook management forwarding
+log_header "Installing Hook Management Forwarding"
+
+CLAUDE_DIR="$HOME/.claude"
+HOOK_FORWARDER_SRC="$SCRIPT_DIR/examples/claude-hook-forwarder.sh"
+HOOK_FORWARDER_DEST="$CLAUDE_DIR/claude-hook-forwarder.sh"
+CLAUDE_SETTINGS="$CLAUDE_DIR/settings.json"
+
+# Create .claude directory if it doesn't exist
+if [ ! -d "$CLAUDE_DIR" ]; then
+    log_info "Creating $CLAUDE_DIR directory"
+    mkdir -p "$CLAUDE_DIR"
+fi
+
+# Copy hook forwarder script (only if it doesn't exist or is different)
+if [ -f "$HOOK_FORWARDER_SRC" ]; then
+    if [ ! -f "$HOOK_FORWARDER_DEST" ] || ! cmp -s "$HOOK_FORWARDER_SRC" "$HOOK_FORWARDER_DEST"; then
+        log_info "Installing hook forwarder script"
+        cp "$HOOK_FORWARDER_SRC" "$HOOK_FORWARDER_DEST"
+        chmod +x "$HOOK_FORWARDER_DEST"
+        log_success "Hook forwarder script installed at $HOOK_FORWARDER_DEST"
+    else
+        log_info "Hook forwarder script already up to date"
+    fi
+else
+    log_error "Hook forwarder script not found at $HOOK_FORWARDER_SRC"
+    log_info "Hook system may not work properly without this script"
+fi
+
+# Check Claude settings and provide instructions if hooks exist
+if [ -f "$CLAUDE_SETTINGS" ]; then
+    if grep -q '"hooks"' "$CLAUDE_SETTINGS" 2>/dev/null; then
+        log_info "Existing Claude hooks detected in $CLAUDE_SETTINGS"
+        log_info "To integrate with Claude Manager, you'll need to manually add:"
+        echo ""
+        echo "  $HOOK_FORWARDER_DEST"
+        echo ""
+        log_info "to your existing hook configuration to avoid overwriting current hooks"
+        log_info "See examples/claude-settings.json.example for integration examples"
+    else
+        log_info "No existing hooks found. Hook forwarder ready for manual configuration."
+        log_info "See examples/claude-settings.json.example for setup instructions"
+    fi
+else
+    log_info "No Claude settings found. Hook forwarder ready for configuration."
+    log_info "See examples/claude-settings.json.example for setup instructions"
+fi
+
 # Final instructions
 log_header "Installation Complete"
 log_success "Claude Manager installed successfully!"

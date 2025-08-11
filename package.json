@@ -1,15 +1,15 @@
 {
   "name": "claude-manager",
   "version": "1.0.0",
-  "description": "Monitor and manage Claude Code hooks, MCP servers, and CLAUDE.md files",
+  "description": "Real-time web dashboard for managing Claude Code across multiple projects with MCP servers, automated hooks, and session tracking",
   "main": "backend/index.js",
   "bin": {
-    "claude-manager-register": "./backend/register-project.js"
+    "claude-manager-register": "backend/register-project.js"
   },
   "license": "MIT",
   "scripts": {
     "start": "cd backend && bun run index.js",
-    "dev": "concurrently -n \"backend,frontend\" -c \"blue,green\" \"cd backend && bun --watch index.js\" \"cd frontend && PORT=3456 BROWSER=none bun run start\"",
+    "dev": "concurrently --names backend,frontend --colors blue,green \"cd backend && bun --watch index.js\" \"cd frontend && PORT=3456 BROWSER=none npm start\"",
     "build": "cd frontend && bun run build",
     "clean": "rm -rf backend/node_modules frontend/node_modules backend/bun.lockb frontend/bun.lockb",
     "test": "cd frontend && bun run test",
@@ -25,6 +25,7 @@
     "dotenv": "^17.2.1",
     "express": "^4.18.2",
     "fs-extra": "^11.1.1",
+    "lodash": "^4.17.21",
     "openai": "^5.11.0",
     "path": "^0.12.7",
     "ws": "^8.18.3"
@@ -32,7 +33,7 @@
   "devDependencies": {
     "concurrently": "^9.2.0",
     "nodemon": "^3.0.1",
-    "playwright": "^1.54.1"
+    "playwright": "^1.54.2"
   },
   "keywords": [
     "claude",
@@ -43,5 +44,9 @@
   "author": "Claude Manager",
   "engines": {
     "node": "~20"
+  },
+  "directories": {
+    "doc": "docs",
+    "example": "examples"
   }
 }

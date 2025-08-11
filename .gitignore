@@ -38,6 +38,14 @@ user.env
 *.backup.*
 backup-*.tar.gz
 
+experments/
+
+# Experiments with embedded git repositories
+experiments/mcp-server-codegraph/
+
+# TTS experiment files
+experiments/tts/fish_speech_tts_guide.md
+
 # OS generated files
 .DS_Store
 .DS_Store?

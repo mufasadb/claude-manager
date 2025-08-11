@@ -14,6 +14,19 @@ const EnvVariablesTable: React.FC<EnvVariablesTableProps> = ({
   projects,
   onRefresh,
 }) => {
+  // Filter out internal/system settings that shouldn't be displayed
+  const filteredEnvVars = Object.entries(envVars).reduce((filtered, [key, value]) => {
+    // Hide transport method settings and other internal configuration
+    if (key.toLowerCase().includes('transport') || 
+        key.toLowerCase().includes('_method') ||
+        key.toLowerCase().includes('_transport') ||
+        key.startsWith('CLAUDE_INTERNAL_') ||
+        key.startsWith('MCP_TRANSPORT_')) {
+      return filtered;
+    }
+    filtered[key] = value;
+    return filtered;
+  }, {} as Record<string, string>);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState<string>('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
@@ -109,7 +122,7 @@ const EnvVariablesTable: React.FC<EnvVariablesTableProps> = ({
     setPushStatus('');
   };
 
-  if (Object.keys(envVars).length === 0) {
+  if (Object.keys(filteredEnvVars).length === 0) {
     return (
       <div className="no-data">No user-level environment variables configured</div>
     );
@@ -126,7 +139,7 @@ const EnvVariablesTable: React.FC<EnvVariablesTableProps> = ({
           </tr>
         </thead>
         <tbody>
-          {Object.entries(envVars).map(([key, value]) => (
+          {Object.entries(filteredEnvVars).map(([key, value]) => (
             <tr key={key}>
               <td className="env-var-key">{key}</td>
               <td className="env-var-value">

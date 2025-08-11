@@ -1,31 +1,30 @@
 {
   "mcpServers": {
     "supabase": {
-      "command": "npx",
+      "command": "bunx",
       "args": [
-        "-y",
         "@supabase/mcp-server-supabase@latest",
         "--access-token",
         "your_supabase_access_token_here"
       ]
     },
     "context7": {
-      "command": "npx",
-      "args": ["-y", "@upstash/context7-mcp@latest"]
+      "command": "bunx",
+      "args": ["@upstash/context7-mcp@latest"]
     },
     "filesystem": {
-      "command": "npx",
+      "command": "bunx",
       "args": [
         "@modelcontextprotocol/server-filesystem",
         "/Users/your-username/projects"
       ]
     },
     "github": {
-      "command": "npx",
+      "command": "bunx",
       "args": ["github-mcp-server"]
     },
     "memory": {
-      "command": "npx",
+      "command": "bunx",
       "args": ["@modelcontextprotocol/server-memory"]
     }
   }

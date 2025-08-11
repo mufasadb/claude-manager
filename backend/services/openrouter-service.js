@@ -175,13 +175,20 @@ Review target: $ARGUMENTS
 </examples>
 
 <output_format>
-Respond with a JSON object using this exact structure. Use JSON prefilling - start your response with just the opening brace:
+Respond with a JSON object using this exact structure. 
+
+IMPORTANT: Ensure all string values are properly escaped for JSON:
+- Escape all double quotes inside strings with \"
+- Escape all backslashes with \\
+- Escape all newlines with \n
+
+Start your response with just the opening brace:
 
 {
   "success": true,
   "data": {
     "description": "Concise description (10-50 words) of what this command accomplishes",
-    "content": "Complete markdown content with proper YAML frontmatter, sections, and examples",
+    "content": "Complete markdown content with proper YAML frontmatter, sections, and examples - ensure all quotes are escaped",
     "suggestedCategory": "Recommended category based on command purpose",
     "allowedTools": ["Specific tools with permissions rather than generic tools"],
     "argumentHint": "Optional hint about expected argument format",
@@ -219,21 +226,92 @@ Respond with a JSON object using this exact structure. Use JSON prefilling - sta
 
             const content = response.data.choices[0].message.content;
             console.log('Received response from OpenRouter, parsing JSON...');
+            console.log('Raw response length:', content.length);
+            console.log('Raw response preview:', content.substring(0, 500));
 
             // Parse the JSON response with improved error handling
             let parsedResponse;
             try {
                 parsedResponse = JSON.parse(content);
             } catch (parseError) {
-                // Try to extract JSON from code blocks
-                let cleanResponse = content.replace(/```json\s*/g, '').replace(/```\s*/g, '');
-                const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
+                console.log('Direct JSON parse failed:', parseError.message);
                 
-                if (jsonMatch) {
-                    parsedResponse = JSON.parse(jsonMatch[0]);
-                    console.log('Successfully parsed JSON from markdown formatting');
-                } else {
-                    throw new Error(`OpenRouter returned non-JSON response: ${content.substring(0, 200)}...`);
+                // The main issue is unescaped newlines in the content field
+                // Let's fix this specific issue
+                let fixedContent = content;
+                
+                // Fix the content field by properly escaping all problematic characters
+                // The main issue is unescaped quotes and newlines in the JSON content field
+                
+                // First, let's try a completely different approach: use JSON.stringify to properly escape the content
+                try {
+                    // Parse the broken JSON by extracting and fixing the content field manually
+                    const contentMatch = content.match(/"content":\s*"([\s\S]*?)"\s*,?\s*"suggestedCategory"/);
+                    if (contentMatch) {
+                        const rawContent = contentMatch[1];
+                        // Properly escape the content using JSON.stringify, then remove outer quotes
+                        const properlyEscapedContent = JSON.stringify(rawContent).slice(1, -1);
+                        
+                        // Replace the problematic content field with the properly escaped version
+                        fixedContent = content.replace(
+                            /"content":\s*"[\s\S]*?"\s*,?\s*"suggestedCategory"/,
+                            `"content": "${properlyEscapedContent}", "suggestedCategory"`
+                        );
+                        
+                        console.log('Applied JSON.stringify fix to content field');
+                    } else {
+                        throw new Error('Could not extract content field');
+                    }
+                } catch (extractError) {
+                    console.log('JSON.stringify approach failed, trying manual escaping:', extractError.message);
+                    
+                    // Fallback to manual escaping
+                    fixedContent = fixedContent.replace(
+                        /("content":\s*")([^"]*)(")/gs,
+                        (match, start, contentValue, end) => {
+                            // Comprehensive escaping for JSON string content
+                            const escapedContent = contentValue
+                                .replace(/\\/g, '\\\\')     // Escape backslashes first
+                                .replace(/"/g, '\\"')       // Escape quotes
+                                .replace(/\n/g, '\\n')      // Escape newlines
+                                .replace(/\r/g, '\\r')      // Escape carriage returns
+                                .replace(/\t/g, '\\t')      // Escape tabs
+                                .replace(/\f/g, '\\f')      // Escape form feeds
+                                .replace(/\b/g, '\\b');     // Escape backspaces
+                            
+                            return start + escapedContent + end;
+                        }
+                    );
+                }
+                
+                console.log('Applied content field fixes, trying to parse again...');
+                
+                try {
+                    parsedResponse = JSON.parse(fixedContent);
+                    console.log('Successfully parsed JSON after fixing bash quotes');
+                } catch (secondParseError) {
+                    console.log('Second parse attempt also failed:', secondParseError.message);
+                    
+                    // Try to extract JSON from markdown formatting if needed
+                    let cleanResponse = content.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+                    const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
+                    
+                    if (jsonMatch) {
+                        try {
+                            parsedResponse = JSON.parse(jsonMatch[0]);
+                            console.log('Successfully parsed JSON from markdown extraction');
+                        } catch (thirdParseError) {
+                            console.log('Third parse attempt also failed:', thirdParseError.message);
+                            
+                            // Save the problematic content for debugging
+                            console.log('Saving problematic content to debug file...');
+                            require('fs').writeFileSync('/tmp/openrouter-debug.json', content);
+                            
+                            throw new Error(`JSON Parse error: ${parseError.message}. Content saved to /tmp/openrouter-debug.json`);
+                        }
+                    } else {
+                        throw new Error(`OpenRouter returned non-JSON response: ${content.substring(0, 200)}...`);
+                    }
                 }
             }
 
@@ -617,22 +695,21 @@ Respond with a JSON object using this exact structure. Use JSON prefilling - sta
 
             console.log('Generating agent with OpenRouter...');
             
-            const completion = await this.client.chat.completions.create({
+            const requestData = {
                 model: this.model,
-                messages: [
-                    {
-                        role: "user",
-                        content: prompt
-                    }
-                ],
+                messages: [{ role: "user", content: prompt }],
                 temperature: 0.3,
-                max_tokens: 4000,
-                extra_headers: {
-                    "X-Title": "Claude Manager Agent Generator",
+                max_tokens: 4000
+            };
+
+            const completion = await this.client.post('/chat/completions', requestData, {
+                headers: {
+                    'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+                    'X-Title': 'Claude Manager Agent Generator'
                 }
             });
 
-            const response = completion.choices[0].message.content;
+            const response = completion.data.choices[0].message.content;
             console.log('Received response from OpenRouter, parsing JSON...');
 
             // Parse the JSON response
@@ -716,20 +793,22 @@ Respond with a JSON object using this exact structure. Use JSON prefilling - sta
         try {
             this.validateApiKey();
             
-            const completion = await this.client.chat.completions.create({
+            const requestData = {
                 model: this.model,
-                messages: [
-                    {
-                        role: "user",
-                        content: "Reply with just 'OK' if you can receive this message."
-                    }
-                ],
+                messages: [{ role: "user", content: "Reply with just 'OK' if you can receive this message." }],
                 max_tokens: 10
+            };
+
+            const completion = await this.client.post('/chat/completions', requestData, {
+                headers: {
+                    'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+                    'X-Title': 'Claude Manager Connection Test'
+                }
             });
 
             return {
                 success: true,
-                response: completion.choices[0].message.content
+                response: completion.data.choices[0].message.content
             };
         } catch (error) {
             return {

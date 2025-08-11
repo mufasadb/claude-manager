@@ -9,18 +9,18 @@ const execAsync = promisify(exec);
 class MCPService {
   constructor(claudeConfigReader = null) {
     this.registryPath = path.join(os.homedir(), '.claude-manager');
-    this.mcpConfigFile = path.join(this.registryPath, 'mcp-config.json');
+    this.savedMCPConfigsFile = path.join(this.registryPath, 'saved-mcp-configs.json');
     this.claudeConfigReader = claudeConfigReader;
     
     // Initialize state
     this.state = {
       userMCPs: {
-        active: {},
-        disabled: {}
+        active: {},      // From claude mcp list (live)
+        saved: {}        // From saved-mcp-configs.json (disabled/backup configs)
       },
       projectMCPs: {
-        active: {},
-        disabled: {}
+        active: {},      // From claude mcp list (live)  
+        saved: {}        // From saved-mcp-configs.json (disabled/backup configs)
       }
     };
     
@@ -29,101 +29,101 @@ class MCPService {
       'supabase': {
         name: 'Supabase',
         description: 'Connect to Supabase database for queries and operations',
-        command: 'npx @supabase/mcp-server',
+        command: 'npx',
+        args: ['-y', '@supabase/mcp-server'],
         transport: 'stdio',
         envVars: [
           { key: 'SUPABASE_URL', description: 'Your Supabase project URL', required: true },
           { key: 'SUPABASE_SERVICE_ROLE_KEY', description: 'Your Supabase service role key', required: true }
-        ],
-        args: []
+        ]
       },
       'neo4j': {
         name: 'Neo4j',
         description: 'Connect to Neo4j graph database with Cypher queries',
-        command: 'npx @neo4j/mcp-server',
+        command: 'npx',
+        args: ['-y', '@jovanhsu/mcp-neo4j-memory-server'],
         transport: 'stdio',
         envVars: [
           { key: 'NEO4J_URI', description: 'Neo4j database URI (e.g., bolt://localhost:7687)', required: true },
           { key: 'NEO4J_USERNAME', description: 'Neo4j username', required: true },
           { key: 'NEO4J_PASSWORD', description: 'Neo4j password', required: true }
-        ],
-        args: []
+        ]
       },
       'playwright': {
         name: 'Playwright',
         description: 'Browser automation for testing and scraping',
-        command: 'npx @playwright/mcp-server',
+        command: 'npx',
+        args: ['-y', '@playwright/mcp'],
         transport: 'stdio',
-        envVars: [],
-        args: []
+        envVars: []
       },
       'puppeteer': {
         name: 'Puppeteer',
         description: 'Chrome browser automation and control',
-        command: 'npx @puppeteer/mcp-server',
+        command: 'npx',
+        args: ['-y', 'puppeteer-mcp-server'],
         transport: 'stdio',
-        envVars: [],
-        args: []
+        envVars: []
       },
       'github': {
         name: 'GitHub',
         description: 'GitHub repository and issue management',
-        command: 'npx @github/mcp-server',
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-github'],
         transport: 'stdio',
         envVars: [
-          { key: 'GITHUB_TOKEN', description: 'GitHub personal access token', required: true }
-        ],
-        args: []
+          { key: 'GITHUB_PERSONAL_ACCESS_TOKEN', description: 'GitHub personal access token', required: true }
+        ]
       },
       'postgresql': {
         name: 'PostgreSQL',
         description: 'Connect to PostgreSQL databases',
-        command: 'npx @postgresql/mcp-server',
+        command: 'npx',
+        args: ['-y', '@henkey/postgres-mcp-server'],
         transport: 'stdio',
         envVars: [
-          { key: 'DATABASE_URL', description: 'PostgreSQL connection string', required: true }
-        ],
-        args: []
+          { key: 'DATABASE_URL', description: 'PostgreSQL connection string (postgresql://user:pass@host:port/db)', required: true }
+        ]
       },
       'notion': {
         name: 'Notion',
         description: 'Notion workspace integration',
-        command: 'npx @notion/mcp-server',
+        command: 'npx',
+        args: ['-y', 'notion-mcp-server'],
         transport: 'stdio',
         envVars: [
           { key: 'NOTION_TOKEN', description: 'Notion integration token', required: true }
-        ],
-        args: []
+        ]
       },
       'figma': {
         name: 'Figma',
         description: 'Figma design file access and manipulation',
-        command: 'npx @figma/mcp-server',
+        command: 'npx',
+        args: ['-y', 'figma-developer-mcp'],
         transport: 'stdio',
         envVars: [
-          { key: 'FIGMA_TOKEN', description: 'Figma personal access token', required: true }
-        ],
-        args: []
+          { key: 'FIGMA_API_KEY', description: 'Figma personal access token', required: true }
+        ]
       },
       'context7': {
         name: 'Context7',
         description: 'Up-to-date documentation and code examples for any library',
-        command: 'npx -y @upstash/context7-mcp',
+        command: 'npx',
+        args: ['-y', '@upstash/context7-mcp'],
         transport: 'stdio',
-        envVars: [],
-        args: []
+        envVars: []
       },
       'mcp-atlassian': {
         name: 'MCP Server for Atlassian Products',
         description: 'MCP server for Jira, Confluence, and other Atlassian products',
-        command: 'docker run -i --rm ghcr.io/sooperset/mcp-atlassian:latest',
+        command: 'docker',
+        args: ['run', '-i', '--rm', 'ghcr.io/sooperset/mcp-atlassian:latest'],
         transport: 'stdio',
         envVars: [
           { key: 'JIRA_URL', description: 'The URL of your Jira instance', required: true },
           { key: 'JIRA_USERNAME', description: 'The username to authenticate with Jira', required: true },
           { key: 'JIRA_API_TOKEN', description: 'The API token to authenticate with Jira', required: true }
-        ],
-        args: []
+        ]
       }
     };
   }
@@ -136,338 +136,377 @@ class MCPService {
   // Configuration Management
   async loadMCPConfig() {
     try {
-      if (await fs.pathExists(this.mcpConfigFile)) {
-        const data = await fs.readJson(this.mcpConfigFile);
-        this.state = {
-          userMCPs: data.userMCPs || { active: {}, disabled: {} },
-          projectMCPs: data.projectMCPs || { active: {}, disabled: {} }
-        };
-      }
+      // Always get live active MCPs from Claude CLI (source of truth)
+      const activeMCPs = await this.getActiveMCPsFromClaude();
+      
+      // Load saved configs (disabled/backup MCPs) from our separate file
+      const savedConfigs = await this.loadSavedMCPConfigs();
+
+      this.state = {
+        userMCPs: {
+          active: activeMCPs,
+          saved: savedConfigs.user || {}
+        },
+        projectMCPs: {
+          active: {},  // TODO: Add project-scoped MCP support later
+          saved: savedConfigs.project || {}
+        }
+      };
     } catch (error) {
       console.error('Error loading MCP config:', error);
     }
   }
 
-  async saveMCPConfig() {
+  async loadSavedMCPConfigs() {
+    try {
+      if (await fs.pathExists(this.savedMCPConfigsFile)) {
+        return await fs.readJson(this.savedMCPConfigsFile);
+      }
+      return { user: {}, project: {} };
+    } catch (error) {
+      console.error('Error loading saved MCP configs:', error);
+      return { user: {}, project: {} };
+    }
+  }
+
+  async getActiveMCPsFromClaude() {
+    try {
+      // Execute claude mcp list from user's Code directory to avoid project-specific context
+      const { stdout } = await execAsync('claude mcp list', { 
+        cwd: path.join(os.homedir(), 'Code')
+      });
+      
+      return this.parseMCPListOutput(stdout);
+    } catch (error) {
+      console.error('Error getting MCPs from Claude CLI:', error);
+      return {};
+    }
+  }
+
+  parseMCPListOutput(output) {
+    const mcps = {};
+    
+    if (!output || output.trim() === '') {
+      return mcps;
+    }
+
+    // Parse the claude mcp list output
+    // Expected format: "servername: command args"
+    const lines = output.split('\n').filter(line => line.trim() !== '');
+    
+    for (const line of lines) {
+      // Skip header lines or empty lines
+      if (line.includes('MCP servers') || line.includes('====') || line.trim() === '') {
+        continue;
+      }
+      
+      // Parse server entries in format "servername: command args"
+      const trimmedLine = line.trim();
+      if (trimmedLine && trimmedLine.includes(':')) {
+        const colonIndex = trimmedLine.indexOf(':');
+        const serverName = trimmedLine.substring(0, colonIndex).trim();
+        const commandPart = trimmedLine.substring(colonIndex + 1).trim();
+        
+        if (serverName) {
+          // Parse command and args
+          const commandParts = commandPart.split(/\s+/);
+          const command = commandParts[0] || 'Unknown';
+          const args = commandParts.slice(1);
+          
+          mcps[serverName] = {
+            name: serverName,
+            status: 'active',
+            command: command,
+            args: args,
+            transport: 'stdio'
+          };
+        }
+      }
+    }
+    
+    return mcps;
+  }
+
+  async saveSavedMCPConfigs() {
     try {
       await fs.ensureDir(this.registryPath);
-      const configData = {
-        ...this.state,
+      const savedConfigs = {
+        user: this.state.userMCPs.saved,
+        project: this.state.projectMCPs.saved,
         lastUpdate: Date.now()
       };
-      await fs.writeJson(this.mcpConfigFile, configData, { spaces: 2 });
+      await fs.writeJson(this.savedMCPConfigsFile, savedConfigs, { spaces: 2 });
     } catch (error) {
-      console.error('Error saving MCP config:', error);
+      console.error('Error saving saved MCP configs:', error);
       throw error;
     }
   }
 
-  // Validation and Sync Methods
+  // Sync Methods - simplified to just reload from Claude CLI
   async syncWithClaudeConfig() {
-    if (!this.claudeConfigReader) {
-      console.warn('ClaudeConfigReader not available for sync');
-      return { success: false, reason: 'No config reader available' };
-    }
-
     try {
       console.log('Syncing MCP state with Claude CLI configuration...');
-      const syncResult = await this.claudeConfigReader.syncWithClaudeManagerConfig();
       
-      // Reload our state after sync
+      // Simply reload from Claude CLI (source of truth)
       await this.loadMCPConfig();
       
-      return syncResult;
+      return { 
+        success: true, 
+        message: 'Synchronized with Claude CLI configuration',
+        timestamp: Date.now()
+      };
     } catch (error) {
       console.error('Error syncing with Claude config:', error);
       return { success: false, error: error.message };
     }
   }
 
-  async validateMCPExists(name, scope = 'user') {
-    if (!this.claudeConfigReader) {
-      // Fallback: check internal state only
-      const mcpData = scope === 'user' ? this.state.userMCPs : this.state.projectMCPs;
-      return !!mcpData.active[name] && !mcpData.active[name].missing;
-    }
 
-    try {
-      const actualMCPs = await this.claudeConfigReader.parseMCPConfig();
-      return !!actualMCPs.mcps[name];
-    } catch (error) {
-      console.error('Error validating MCP existence:', error);
-      return false;
-    }
-  }
 
-  async validateAndSyncIfNeeded(name, scope, operation) {
-    // Check if MCP exists in Claude CLI before operation
-    const exists = await this.validateMCPExists(name, scope);
-    
-    if (!exists && (operation === 'disable' || operation === 'enable')) {
-      // Try to sync and check again
-      console.log(`MCP ${name} not found in Claude CLI, attempting sync...`);
-      const syncResult = await this.syncWithClaudeConfig();
-      
-      if (syncResult.success) {
-        const existsAfterSync = await this.validateMCPExists(name, scope);
-        if (!existsAfterSync) {
-          throw new Error(`MCP '${name}' does not exist in Claude CLI. It may have been manually removed or be stale. Please refresh and try again.`);
-        }
-      }
-    }
-    
-    return exists;
-  }
 
-  // MCP Management
+
+
+  // MCP Management via Claude CLI
   async addMCP(scope, mcpConfig) {
-    const { name, command, transport = 'stdio', envVars = {}, args = [], projectPath } = mcpConfig;
+    const { name, command, envVars = {}, args = [] } = mcpConfig;
     
     // Validate required fields
     if (!name || !command) {
       throw new Error('Name and command are required');
     }
 
-    // Build Claude CLI command
-    const cliCommand = this.buildClaudeCommand('add', {
-      name,
-      command,
-      transport,
-      envVars,
-      args,
-      scope: scope === 'user' ? 'user' : 'project',
-      projectPath
-    });
-
     try {
-      // Execute Claude CLI command
-      const { stdout, stderr } = await execAsync(cliCommand, {
-        cwd: projectPath || process.cwd()
-      });
-
-      // Store in our state
-      const mcpData = {
-        name,
-        command,
-        transport,
-        envVars,
-        args,
-        addedAt: Date.now(),
-        scope
-      };
-
-      if (scope === 'user') {
-        this.state.userMCPs.active[name] = mcpData;
-      } else {
-        this.state.projectMCPs.active[name] = mcpData;
+      // Build Claude CLI command: claude mcp add -s user name -e KEY=value -- command args
+      let cliCommand = `claude mcp add -s ${scope} "${name}"`;
+      
+      // Add environment variables
+      if (envVars && Object.keys(envVars).length > 0) {
+        for (const [key, value] of Object.entries(envVars)) {
+          cliCommand += ` -e ${key}="${value}"`;
+        }
+      }
+      
+      // Add command and args
+      cliCommand += ` -- ${command}`;
+      if (args && args.length > 0) {
+        cliCommand += ` ${args.join(' ')}`;
       }
 
-      await this.saveMCPConfig();
+      console.log(`Executing Claude CLI command: ${cliCommand}`);
+      
+      const { stdout, stderr } = await execAsync(cliCommand, {
+        cwd: path.join(os.homedir(), 'Code')  // Execute from user level
+      });
+
+      if (stderr && !stderr.includes('Added MCP server')) {
+        console.warn(`Claude CLI warning: ${stderr}`);
+      }
+
+      // Refresh active MCPs from Claude CLI (source of truth)
+      await this.loadMCPConfig();
       
       return { success: true, output: stdout };
     } catch (error) {
+      console.error(`Failed to add MCP '${name}':`, error.message);
       throw new Error(`Failed to add MCP: ${error.message}`);
     }
   }
 
-  async removeMCP(scope, name, projectPath) {
+  async removeMCP(scope, name) {
     try {
-      const cliCommand = this.buildClaudeCommand('remove', {
-        name,
-        projectPath
+      // Direct Claude CLI command: claude mcp remove "name" -s user
+      const cliCommand = `claude mcp remove "${name}" -s ${scope}`;
+
+      console.log(`Executing Claude CLI command: ${cliCommand}`);
+      
+      const { stdout, stderr } = await execAsync(cliCommand, {
+        cwd: path.join(os.homedir(), 'Code')  // Execute from user level
       });
 
-      await execAsync(cliCommand, {
-        cwd: projectPath || process.cwd()
-      });
-
-      // Remove from our state
-      if (scope === 'user') {
-        delete this.state.userMCPs.active[name];
-        delete this.state.userMCPs.disabled[name];
-      } else {
-        delete this.state.projectMCPs.active[name];
-        delete this.state.projectMCPs.disabled[name];
+      if (stderr && !stderr.includes('Removed MCP server')) {
+        console.warn(`Claude CLI warning: ${stderr}`);
       }
 
-      await this.saveMCPConfig();
+      // Also remove from saved configs if it exists there
+      if (scope === 'user') {
+        delete this.state.userMCPs.saved[name];
+      } else {
+        delete this.state.projectMCPs.saved[name];
+      }
+
+      await this.saveSavedMCPConfigs();
       
-      return { success: true };
+      // Refresh active MCPs from Claude CLI (source of truth)
+      await this.loadMCPConfig();
+      
+      return { success: true, output: stdout };
     } catch (error) {
+      console.error(`Failed to remove MCP '${name}':`, error.message);
       throw new Error(`Failed to remove MCP: ${error.message}`);
     }
   }
 
-  async disableMCP(scope, name, projectPath) {
+  async disableMCP(scope, name) {
+    // First check if MCP is currently active in Claude
+    const activeMCPs = await this.getActiveMCPsFromClaude();
+    const mcpData = activeMCPs[name];
+
+    if (!mcpData) {
+      throw new Error(`MCP '${name}' is not currently active in Claude CLI.`);
+    }
+
     try {
-      // Validate MCP exists before attempting to disable
-      await this.validateAndSyncIfNeeded(name, scope, 'disable');
+      // Save the full config to our saved configs before removing from Claude
+      const savedConfig = {
+        name: mcpData.name,
+        command: mcpData.command,
+        args: mcpData.args,
+        envVars: {}, // We'll need to get this from claude mcp get
+        transport: mcpData.transport,
+        disabledAt: Date.now(),
+        source: 'disabled_from_active'
+      };
 
-      // Check if MCP is in our active state
-      const mcpData = scope === 'user' ? this.state.userMCPs.active[name] : this.state.projectMCPs.active[name];
-      if (!mcpData) {
-        throw new Error(`MCP '${name}' is not in active state. It may already be disabled or doesn't exist.`);
+      // Try to get environment variables from claude mcp get
+      try {
+        const { stdout: detailOutput } = await execAsync(`claude mcp get "${name}"`, {
+          cwd: path.join(os.homedir(), 'Code')
+        });
+        const envVars = this.parseEnvVarsFromMcpGet(detailOutput);
+        savedConfig.envVars = envVars;
+      } catch (error) {
+        console.warn(`Could not retrieve env vars for ${name}:`, error.message);
       }
 
-      // Remove from Claude but keep in our disabled storage
-      const cliCommand = this.buildClaudeCommand('remove', {
-        name,
-        projectPath
-      });
-
-      await execAsync(cliCommand, {
-        cwd: projectPath || process.cwd()
-      });
-
-      // Move from active to disabled
+      // Save to our backup configs
       if (scope === 'user') {
-        delete this.state.userMCPs.active[name];
-        this.state.userMCPs.disabled[name] = { ...mcpData, disabledAt: Date.now() };
+        this.state.userMCPs.saved[name] = savedConfig;
       } else {
-        delete this.state.projectMCPs.active[name];
-        this.state.projectMCPs.disabled[name] = { ...mcpData, disabledAt: Date.now() };
+        this.state.projectMCPs.saved[name] = savedConfig;
+      }
+      
+      await this.saveSavedMCPConfigs();
+
+      // Remove from Claude CLI
+      const cliCommand = `claude mcp remove "${name}" -s ${scope}`;
+      console.log(`Executing Claude CLI command: ${cliCommand}`);
+      
+      const { stdout, stderr } = await execAsync(cliCommand, {
+        cwd: path.join(os.homedir(), 'Code')
+      });
+
+      if (stderr && !stderr.includes('Removed MCP server')) {
+        console.warn(`Claude CLI warning: ${stderr}`);
       }
 
-      await this.saveMCPConfig();
+      // Refresh active MCPs from Claude CLI
+      await this.loadMCPConfig();
       
-      return { success: true };
+      return { success: true, output: stdout };
     } catch (error) {
+      console.error(`Failed to disable MCP '${name}':`, error.message);
       throw new Error(`Failed to disable MCP: ${error.message}`);
     }
   }
 
-  async enableMCP(scope, name, projectPath) {
+  parseEnvVarsFromMcpGet(output) {
+    const envVars = {};
+    const lines = output.split('\n');
+    let inEnvSection = false;
+    
+    for (const line of lines) {
+      if (line.includes('Environment:')) {
+        inEnvSection = true;
+        continue;
+      }
+      if (inEnvSection && line.trim() && !line.includes('To remove')) {
+        const trimmed = line.trim();
+        if (trimmed.includes('=')) {
+          const [key, value] = trimmed.split('=');
+          envVars[key] = value;
+        }
+      }
+      if (line.includes('To remove')) {
+        break;
+      }
+    }
+    
+    return envVars;
+  }
+
+  async enableMCP(scope, name) {
     try {
-      // Check if MCP is in our disabled state
-      let mcpData;
+      // Check if MCP is in our saved configs
+      let savedConfig;
       if (scope === 'user') {
-        mcpData = this.state.userMCPs.disabled[name];
+        savedConfig = this.state.userMCPs.saved[name];
       } else {
-        mcpData = this.state.projectMCPs.disabled[name];
+        savedConfig = this.state.projectMCPs.saved[name];
       }
 
-      if (!mcpData) {
-        throw new Error(`MCP '${name}' is not in disabled state. It may already be enabled or doesn't exist.`);
+      if (!savedConfig) {
+        throw new Error(`MCP '${name}' is not in saved configs. Cannot enable without saved configuration.`);
       }
 
-      // Check if MCP already exists in Claude CLI (shouldn't, but let's be safe)
-      const alreadyExists = await this.validateMCPExists(name, scope);
-      if (alreadyExists) {
-        console.log(`MCP '${name}' already exists in Claude CLI, moving to active state without re-adding`);
-      } else {
-        // Re-add to Claude
-        const cliCommand = this.buildClaudeCommand('add', {
-          name: mcpData.name,
-          command: mcpData.command,
-          transport: mcpData.transport,
-          envVars: mcpData.envVars,
-          args: mcpData.args,
-          scope: scope === 'user' ? 'user' : 'project',
-          projectPath
-        });
-
-        await execAsync(cliCommand, {
-          cwd: projectPath || process.cwd()
-        });
-      }
-
-      // Move from disabled to active
-      if (scope === 'user') {
-        delete this.state.userMCPs.disabled[name];
-        this.state.userMCPs.active[name] = { ...mcpData, enabledAt: Date.now() };
-      } else {
-        delete this.state.projectMCPs.disabled[name];
-        this.state.projectMCPs.active[name] = { ...mcpData, enabledAt: Date.now() };
-      }
-
-      await this.saveMCPConfig();
+      // Build Claude CLI command using saved config
+      let cliCommand = `claude mcp add -s ${scope} "${name}"`;
       
-      return { success: true };
+      // Add environment variables from saved config
+      if (savedConfig.envVars && Object.keys(savedConfig.envVars).length > 0) {
+        for (const [key, value] of Object.entries(savedConfig.envVars)) {
+          cliCommand += ` -e ${key}="${value}"`;
+        }
+      }
+      
+      // Add command and args from saved config
+      cliCommand += ` -- ${savedConfig.command}`;
+      if (savedConfig.args && savedConfig.args.length > 0) {
+        cliCommand += ` ${savedConfig.args.join(' ')}`;
+      }
+
+      console.log(`Executing Claude CLI command: ${cliCommand}`);
+      
+      const { stdout, stderr } = await execAsync(cliCommand, {
+        cwd: path.join(os.homedir(), 'Code')
+      });
+
+      if (stderr && !stderr.includes('Added MCP server')) {
+        console.warn(`Claude CLI warning: ${stderr}`);
+      }
+
+      // Remove from saved configs (it's now active in Claude)
+      if (scope === 'user') {
+        delete this.state.userMCPs.saved[name];
+      } else {
+        delete this.state.projectMCPs.saved[name];
+      }
+
+      await this.saveSavedMCPConfigs();
+      
+      // Refresh active MCPs from Claude CLI
+      await this.loadMCPConfig();
+      
+      return { success: true, output: stdout };
     } catch (error) {
+      console.error(`Failed to enable MCP '${name}':`, error.message);
       throw new Error(`Failed to enable MCP: ${error.message}`);
     }
   }
 
-  // Build Claude CLI command
-  buildClaudeCommand(action, options) {
-    const { name, command, transport, envVars, args, scope, projectPath } = options;
-    
-    let cmd = `claude mcp ${action}`;
-    
-    if (action === 'add') {
-      // Add scope if specified
-      if (scope) {
-        cmd += ` --scope ${scope}`;
-      }
-      
-      // Add transport if not stdio
-      if (transport && transport !== 'stdio') {
-        cmd += ` --transport ${transport}`;
-      }
-      
-      // Add name first
-      cmd += ` ${name}`;
-      
-      // Add environment variables after name
-      if (envVars && Object.keys(envVars).length > 0) {
-        for (const [key, value] of Object.entries(envVars)) {
-          // Properly quote environment variable values to handle special characters
-          const quotedValue = `"${value.replace(/"/g, '\\"')}"`;
-          cmd += ` -e ${key}=${quotedValue}`;
-        }
-      }
-      
-      // Add command with proper separator for stdio transport
-      if (transport === 'stdio' || !transport) {
-        cmd += ` -- ${command}`;
-        if (args && args.length > 0) {
-          // For Docker commands, inject environment variable flags
-          if (command === 'docker' && envVars && Object.keys(envVars).length > 0) {
-            const dockerArgs = [...args];
-            // Insert -e flags for each env var after 'run' arguments but before image name
-            const imageIndex = dockerArgs.findIndex(arg => arg.includes('/') && arg.includes(':'));
-            if (imageIndex !== -1) {
-              // Insert env var flags before the image name
-              for (const [key] of Object.entries(envVars)) {
-                dockerArgs.splice(imageIndex, 0, '-e', key);
-              }
-            }
-            cmd += ` ${dockerArgs.join(' ')}`;
-          } else {
-            cmd += ` ${args.join(' ')}`;
-          }
-        }
-      } else {
-        cmd += ` ${command}`;
-      }
-    } else if (action === 'remove') {
-      cmd += ` ${name}`;
-    }
-    
-    return cmd;
-  }
-
-  // List MCPs
-  async listMCPs(scope, autoSync = true) {
-    // Auto-sync with Claude CLI before returning state
-    if (autoSync && this.claudeConfigReader) {
-      try {
-        await this.syncWithClaudeConfig();
-      } catch (error) {
-        console.warn('Auto-sync failed during listMCPs:', error.message);
-        // Continue with cached state if sync fails
-      }
-    }
+  // List MCPs - always fresh from Claude CLI + saved configs
+  async listMCPs(scope) {
+    // Refresh from Claude CLI to get latest state
+    await this.loadMCPConfig();
 
     if (scope === 'user') {
       return {
-        active: this.state.userMCPs.active,
-        disabled: this.state.userMCPs.disabled
+        active: this.state.userMCPs.active,   // From claude mcp list
+        disabled: this.state.userMCPs.saved   // From saved-mcp-configs.json (frontend expects 'disabled')
       };
     } else {
       return {
-        active: this.state.projectMCPs.active,
-        disabled: this.state.projectMCPs.disabled
+        active: this.state.projectMCPs.active, // From claude mcp list
+        disabled: this.state.projectMCPs.saved // From saved-mcp-configs.json (frontend expects 'disabled')
       };
     }
   }
@@ -484,7 +523,17 @@ class MCPService {
 
   // Get state
   getState() {
-    return this.state;
+    // Return state with 'disabled' as empty for now (clean slate approach)
+    return {
+      userMCPs: {
+        active: this.state.userMCPs.active,
+        disabled: {}  // Empty - we'll build this up as we disable MCPs
+      },
+      projectMCPs: {
+        active: this.state.projectMCPs.active,
+        disabled: {}  // Empty - we'll build this up as we disable MCPs  
+      }
+    };
   }
 }
 

@@ -47,7 +47,7 @@ const HookEvents: React.FC = () => {
 
   const loadEvents = useCallback(async () => {
     try {
-      const response = await fetch(`/api/hooks/events?limit=${limit}`);
+      const response = await fetch(`http://localhost:3455/api/hooks/events?limit=${limit}`);
       if (response.ok) {
         const data = await response.json();
         setEvents(data.events || []);
