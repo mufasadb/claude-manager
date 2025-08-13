@@ -45,6 +45,7 @@ const UserScope: React.FC<UserScopeProps> = ({
           <MCPManagement 
             scope="user"
             onMCPUpdate={onRefresh}
+            envVars={appState.userEnvVars}
           />
         </div>
       </div>

@@ -72,7 +72,7 @@ class MCPService {
         args: ['-y', '@modelcontextprotocol/server-github'],
         transport: 'stdio',
         envVars: [
-          { key: 'GITHUB_PERSONAL_ACCESS_TOKEN', description: 'GitHub personal access token', required: true }
+          { key: 'GITHUB_TOKEN', description: 'GitHub personal access token', required: true }
         ]
       },
       'postgresql': {
@@ -92,7 +92,8 @@ class MCPService {
         args: ['-y', 'notion-mcp-server'],
         transport: 'stdio',
         envVars: [
-          { key: 'NOTION_TOKEN', description: 'Notion integration token', required: true }
+          { key: 'NOTION_TOKEN', description: 'Notion integration token', required: true },
+          { key: 'NOTION_PAGE_ID', description: 'Notion page ID to access', required: true }
         ]
       },
       'figma': {

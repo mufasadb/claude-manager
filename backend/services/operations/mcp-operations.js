@@ -22,7 +22,7 @@ class MCPOperations {
         name: 'Neo4j',
         description: 'Connect to Neo4j graph database with Cypher queries',
         command: 'npx',
-        args: ['-y', '@neo4j/mcp-server'],
+        args: ['-y', '@jovanhsu/mcp-neo4j-memory-server'],
         transport: 'stdio',
         envVars: [
           { key: 'NEO4J_URI', description: 'Neo4j database URI (e.g., bolt://localhost:7687)', required: true },
@@ -34,7 +34,7 @@ class MCPOperations {
         name: 'Playwright',
         description: 'Browser automation for testing and scraping',
         command: 'npx',
-        args: ['-y', '@playwright/mcp-server'],
+        args: ['-y', '@playwright/mcp'],
         transport: 'stdio',
         envVars: []
       },
@@ -42,7 +42,7 @@ class MCPOperations {
         name: 'Puppeteer',
         description: 'Chrome browser automation and control',
         command: 'npx',
-        args: ['-y', '@puppeteer/mcp-server'],
+        args: ['-y', 'puppeteer-mcp-server'],
         transport: 'stdio',
         envVars: []
       },
@@ -50,7 +50,7 @@ class MCPOperations {
         name: 'GitHub',
         description: 'GitHub repository and issue management',
         command: 'npx',
-        args: ['-y', '@github/mcp-server'],
+        args: ['-y', '@modelcontextprotocol/server-github'],
         transport: 'stdio',
         envVars: [
           { key: 'GITHUB_TOKEN', description: 'GitHub personal access token', required: true }
@@ -60,7 +60,7 @@ class MCPOperations {
         name: 'PostgreSQL',
         description: 'Connect to PostgreSQL databases',
         command: 'npx',
-        args: ['-y', '@postgresql/mcp-server'],
+        args: ['-y', '@henkey/postgres-mcp-server'],
         transport: 'stdio',
         envVars: [
           { key: 'DATABASE_URL', description: 'PostgreSQL connection string', required: true }
@@ -70,20 +70,21 @@ class MCPOperations {
         name: 'Notion',
         description: 'Notion workspace integration',
         command: 'npx',
-        args: ['-y', '@notion/mcp-server'],
+        args: ['-y', 'notion-mcp-server'],
         transport: 'stdio',
         envVars: [
-          { key: 'NOTION_TOKEN', description: 'Notion integration token', required: true }
+          { key: 'NOTION_TOKEN', description: 'Notion integration token', required: true },
+          { key: 'NOTION_PAGE_ID', description: 'Notion page ID to access', required: true }
         ]
       },
       'figma': {
         name: 'Figma',
         description: 'Figma design file access and manipulation',
         command: 'npx',
-        args: ['-y', '@figma/mcp-server'],
+        args: ['-y', 'figma-developer-mcp'],
         transport: 'stdio',
         envVars: [
-          { key: 'FIGMA_TOKEN', description: 'Figma personal access token', required: true }
+          { key: 'FIGMA_API_KEY', description: 'Figma personal access token', required: true }
         ]
       },
       'context7': {

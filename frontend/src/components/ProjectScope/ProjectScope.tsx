@@ -56,6 +56,7 @@ const ProjectScope: React.FC<ProjectScopeProps> = ({
             scope="project"
             projectPath={project.path}
             onMCPUpdate={onRefresh}
+            envVars={appState.projectEnvVars[selectedProject] || {}}
           />
         </div>
       </div>

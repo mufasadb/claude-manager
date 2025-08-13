@@ -190,5 +190,5 @@ Centralized API key and configuration management across all projects:
 **Session tracking not updating?**
 -  This reads from the jsonl files make sure they're in the default location
 
-**Why is it saying my sessions are only 4 nd abit hours long?**
+**Why is it saying my sessions are only 4 and a bit hours long?**
 Noone has actually come out and told us howi t works but in my experience my usage rolls ove if im nearing limits on the clock, so i've built this app assuming that the timer starts 4+remaining minutes in hour (based on gmt)

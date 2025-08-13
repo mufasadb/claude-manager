@@ -7,6 +7,7 @@ interface MCPManagementProps {
   scope: 'user' | 'project';
   projectPath?: string;
   onMCPUpdate?: (mcps: MCPState) => void;
+  envVars?: Record<string, string>;
 }
 
 interface MCPFormData {
@@ -17,7 +18,7 @@ interface MCPFormData {
   args: string[];
 }
 
-const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCPUpdate }) => {
+const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCPUpdate, envVars = {} }) => {
   const [templates, setTemplates] = useState<Record<string, MCPTemplate>>({});
   const [mcps, setMcps] = useState<MCPState>({ active: {}, disabled: {} });
   const [loading, setLoading] = useState(false);
@@ -70,12 +71,22 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
   const handleTemplateSelect = (templateKey: string) => {
     const template = templates[templateKey];
     if (template) {
+      // Pre-fill environment variables that exist in the current scope
+      const prefilledEnvVars: Record<string, string> = {};
+      if (template.envVars) {
+        template.envVars.forEach(envVar => {
+          if (envVars[envVar.key]) {
+            prefilledEnvVars[envVar.key] = envVars[envVar.key];
+          }
+        });
+      }
+
       setSelectedTemplate(templateKey);
       setFormData({
         name: templateKey,
         command: template.command,
         transport: template.transport,
-        envVars: {},
+        envVars: prefilledEnvVars,
         args: [...template.args]
       });
     }
