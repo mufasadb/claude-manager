@@ -6,6 +6,17 @@ import TabNavigation, { Tab } from './components/TabNavigation/TabNavigation';
 import SessionSidebar from './components/SessionSidebar/SessionSidebar';
 import { AppState } from './types';
 import { ApiService } from './services/ApiService';
+import { WebSocketService } from './services/WebSocketService';
+import { 
+  ClipboardList, 
+  Settings, 
+  Plug, 
+  Zap, 
+  Bot, 
+  Fish, 
+  Globe, 
+  BookOpen 
+} from 'lucide-react';
 
 // Import individual components
 import ProjectRegistration from './components/UserScope/ProjectRegistration';
@@ -17,6 +28,7 @@ import HookManagement from './components/HookManagement/HookManagement';
 import HookEvents from './components/HookEvents/HookEvents';
 import EnvVariablesTable from './components/UserScope/EnvVariablesTable';
 import ClaudeMdEditor from './components/ProjectScope/ClaudeMdEditor';
+import DocumentationManager from './components/UserScope/DocumentationManager';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>({
@@ -39,6 +51,20 @@ const App: React.FC = () => {
   useEffect(() => {
     // Initial data fetch
     refreshData();
+    
+    // Set up WebSocket connection for real-time updates
+    WebSocketService.connect((message) => {
+      console.log('WebSocket message received:', message);
+      if (message.type === 'state-update') {
+        // Update the entire app state with new data
+        refreshData();
+      }
+    });
+
+    // Cleanup on component unmount
+    return () => {
+      WebSocketService.disconnect();
+    };
   }, []);
 
   const refreshData = async () => {
@@ -51,22 +77,32 @@ const App: React.FC = () => {
   };
 
   const tabs: Tab[] = [
-    { id: 'projects', label: 'Projects', icon: '📋' },
-    { id: 'settings', label: 'Claude Settings', icon: '⚙️' },
-    { id: 'mcp', label: 'MCP Servers', icon: '🔌' },
-    { id: 'slash-commands', label: 'Slash Commands', icon: '⚡' },
-    { id: 'agents', label: 'Agents', icon: '🤖' },
-    { id: 'hooks', label: 'Hooks', icon: '🎣' },
-    { id: 'env-vars', label: 'Environment', icon: '🌍' },
+    { id: 'projects', label: 'Projects', icon: <ClipboardList size={16} /> },
+    { id: 'settings', label: 'Claude Settings', icon: <Settings size={16} /> },
+    { id: 'mcp', label: 'MCP Servers', icon: <Plug size={16} /> },
+    { id: 'slash-commands', label: 'Slash Commands', icon: <Zap size={16} /> },
+    { id: 'agents', label: 'Agents', icon: <Bot size={16} /> },
+    { id: 'hooks', label: 'Hooks', icon: <Fish size={16} /> },
+    { id: 'env-vars', label: 'Environment', icon: <Globe size={16} /> },
+    { id: 'documentation', label: 'Documentation', icon: <BookOpen size={16} /> },
   ];
 
   const renderTabContent = () => {
     switch (activeTab) {
+      case 'documentation':
+        return (
+          <div className="scope-section">
+            <div className="scope-content">
+              <DocumentationManager />
+            </div>
+          </div>
+        );
+        
       case 'projects':
         return (
           <div className="scope-section">
             <div className="scope-content">
-              <ProjectRegistration />
+              <ProjectRegistration projects={appState.projects} />
             </div>
           </div>
         );
@@ -171,7 +207,12 @@ const App: React.FC = () => {
 
   return (
     <div className="App">
-      <Header onOpenSessionSidebar={() => setIsSessionSidebarOpen(true)} />
+      <Header 
+        onOpenSessionSidebar={() => setIsSessionSidebarOpen(true)}
+        selectedProject={selectedProject}
+        projectPath={selectedProject ? appState.projects[selectedProject]?.path : undefined}
+        selectedScope={selectedScope}
+      />
       
       <div className="container">
         <ScopeSelector

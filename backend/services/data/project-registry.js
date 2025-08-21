@@ -52,7 +52,7 @@ class ProjectRegistry {
   }
 
   // Project management
-  async addProject(name, projectPath) {
+  async addProject(name, projectPath, interfaceUrl = null) {
     if (!name || !projectPath) {
       throw new Error('Name and path are required');
     }
@@ -63,7 +63,8 @@ class ProjectRegistry {
 
     this.state.projects[name] = {
       path: projectPath,
-      registeredAt: Date.now()
+      registeredAt: Date.now(),
+      interfaceUrl: interfaceUrl
     };
 
     await this.loadProjectConfig(name);
@@ -232,6 +233,31 @@ class ProjectRegistry {
       projects: { ...this.state.projects },
       projectEnvVars: { ...this.state.projectEnvVars }
     };
+  }
+
+  // Interface URL management
+  getProjectByPath(projectPath) {
+    for (const [name, project] of Object.entries(this.state.projects)) {
+      if (project.path === projectPath) {
+        return { name, ...project };
+      }
+    }
+    return null;
+  }
+
+  getInterfaceUrlByPath(projectPath) {
+    const project = this.getProjectByPath(projectPath);
+    return project?.interfaceUrl || null;
+  }
+
+  async updateInterfaceUrl(projectName, interfaceUrl) {
+    if (!this.state.projects[projectName]) {
+      throw new Error(`Project ${projectName} not found`);
+    }
+    
+    this.state.projects[projectName].interfaceUrl = interfaceUrl;
+    await this.save();
+    return this.state.projects[projectName];
   }
 
   // Validation

@@ -5,9 +5,10 @@ const { validatePath } = require('../utils/path-utils');
 const OpenRouterService = require('./openrouter-service');
 
 class CommandService {
-    constructor() {
+    constructor(claudeManagerInstance = null) {
         this.validNamePattern = /^[a-zA-Z0-9_-]+$/;
-        this.openRouterService = new OpenRouterService();
+        this.openRouterService = new OpenRouterService(claudeManagerInstance);
+        this.claudeManagerInstance = claudeManagerInstance;
     }
 
     validateCommandName(name) {
@@ -89,12 +90,19 @@ class CommandService {
                 throw new Error('Invalid command file path');
             }
 
+            // Gather project context if this is a project-scoped command
+            let projectContext = null;
+            if (scope === 'project' && projectName) {
+                projectContext = await this.gatherProjectContext(projectName);
+            }
+
             // Generate command content using OpenRouter
             console.log(`Generating slash command with OpenRouter: ${commandName}`);
             const generationResult = await this.openRouterService.generateSlashCommand(
                 commandName, 
                 instructions, 
-                category
+                category,
+                projectContext
             );
 
             if (!generationResult.success) {
@@ -368,6 +376,135 @@ $ARGUMENTS
 
         } catch (error) {
             console.error('Error deleting slash command:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    async gatherProjectContext(projectName) {
+        try {
+            const registryPath = path.join(require('os').homedir(), '.claude-manager', 'registry.json');
+            if (!await fs.pathExists(registryPath)) {
+                return null;
+            }
+
+            const registry = JSON.parse(await fs.readFile(registryPath, 'utf8'));
+            const project = registry.projects[projectName];
+            if (!project || !project.path) {
+                return null;
+            }
+
+            const projectPath = project.path;
+            const context = {
+                name: projectName,
+                path: projectPath
+            };
+
+            // Try to read package.json for tech stack info
+            const packageJsonPath = path.join(projectPath, 'package.json');
+            if (await fs.pathExists(packageJsonPath)) {
+                try {
+                    const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf8'));
+                    
+                    // Determine framework
+                    const deps = { ...packageJson.dependencies, ...packageJson.devDependencies };
+                    context.framework = this.detectFramework(deps);
+                    context.packageManager = await fs.pathExists(path.join(projectPath, 'yarn.lock')) ? 'yarn' :
+                                           await fs.pathExists(path.join(projectPath, 'pnpm-lock.yaml')) ? 'pnpm' : 'npm';
+                    
+                    // Get available scripts
+                    if (packageJson.scripts) {
+                        context.scripts = Object.keys(packageJson.scripts);
+                    }
+                    
+                    // Get key dependencies
+                    if (deps) {
+                        context.dependencies = Object.keys(deps).slice(0, 10);
+                    }
+                } catch (error) {
+                    console.warn('Error reading package.json:', error.message);
+                }
+            }
+
+            // Detect common file types
+            try {
+                const files = await fs.readdir(projectPath);
+                const extensions = new Set();
+                for (const file of files.slice(0, 20)) {
+                    const ext = path.extname(file).toLowerCase();
+                    if (ext && !['.git', '.node_modules', '.DS_Store'].includes(file)) {
+                        extensions.add(ext);
+                    }
+                }
+                context.fileTypes = Array.from(extensions).slice(0, 8);
+            } catch (error) {
+                console.warn('Error reading project files:', error.message);
+            }
+
+            return context;
+        } catch (error) {
+            console.warn('Error gathering project context:', error.message);
+            return null;
+        }
+    }
+
+    detectFramework(deps) {
+        if (deps.react) return 'React';
+        if (deps.vue) return 'Vue';
+        if (deps.angular) return 'Angular';
+        if (deps.svelte) return 'Svelte';
+        if (deps.express) return 'Express';
+        if (deps['@nestjs/core']) return 'NestJS';
+        if (deps.fastify) return 'Fastify';
+        if (deps.next) return 'Next.js';
+        if (deps.nuxt) return 'Nuxt.js';
+        if (deps.gatsby) return 'Gatsby';
+        if (deps.typescript) return 'TypeScript';
+        return 'Node.js';
+    }
+
+    async getCommandContent(scope, relativePath, projectName = null) {
+        try {
+            if (!['user', 'project'].includes(scope)) {
+                throw new Error('Scope must be either "user" or "project"');
+            }
+
+            if (scope === 'project' && !projectName) {
+                throw new Error('Project name is required for project scope');
+            }
+
+            if (!relativePath || !relativePath.endsWith('.md')) {
+                throw new Error('Invalid command file path');
+            }
+
+            // Get target directory
+            const baseCommandsDir = this.getCommandsDirectory(scope, projectName);
+            const commandFile = path.join(baseCommandsDir, relativePath);
+
+            // Validate path security
+            if (!validatePath(commandFile, [baseCommandsDir])) {
+                throw new Error('Invalid command file path');
+            }
+
+            // Check if command file exists
+            if (!await fs.pathExists(commandFile)) {
+                throw new Error(`Command file ${relativePath} does not exist`);
+            }
+
+            // Read and return the command content
+            const content = await fs.readFile(commandFile, 'utf8');
+            
+            return {
+                success: true,
+                content,
+                relativePath,
+                fullPath: commandFile
+            };
+
+        } catch (error) {
+            console.error('Error reading command content:', error);
             return {
                 success: false,
                 error: error.message

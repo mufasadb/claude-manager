@@ -4,7 +4,7 @@ import './TabNavigation.css';
 export interface Tab {
   id: string;
   label: string;
-  icon: string;
+  icon: React.ReactNode;
 }
 
 interface TabNavigationProps {

@@ -3,139 +3,202 @@
 }
 
 .config-file {
-  background: #2d3748;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   overflow: hidden;
   border: 1px solid #4a5568;
+  position: relative;
+}
+
+.config-file::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #4299e1, #63b3ed, #90cdf4);
+  opacity: 0.8;
 }
 
 .config-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
-  background: #4a5568;
-  border-bottom: 1px solid #718096;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, rgba(74, 85, 104, 0.8), rgba(45, 55, 72, 0.9));
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(99, 179, 237, 0.2);
+  position: relative;
+  z-index: 2;
 }
 
 .config-header h4 {
   margin: 0;
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-  color: #e2e8f0;
-  font-size: 16px;
-  font-weight: 600;
+  color: #f1f5f9;
+  font-size: 18px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.config-header h4::before {
+  content: '⚙️';
+  font-size: 20px;
 }
 
 .expand-btn {
-  background: none;
-  border: none;
+  background: linear-gradient(135deg, rgba(66, 153, 225, 0.2), rgba(99, 179, 237, 0.1));
+  border: 1px solid rgba(66, 153, 225, 0.3);
   cursor: pointer;
   font-size: 18px;
-  padding: 4px 8px;
-  border-radius: 4px;
-  transition: all 0.2s ease;
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  color: #e2e8f0;
+  backdrop-filter: blur(10px);
 }
 
 .expand-btn:hover {
-  background: #718096;
-  transform: scale(1.1);
+  background: linear-gradient(135deg, rgba(66, 153, 225, 0.3), rgba(99, 179, 237, 0.2));
+  border-color: rgba(66, 153, 225, 0.5);
+  transform: scale(1.05) rotate(180deg);
+  box-shadow: 0 4px 12px rgba(66, 153, 225, 0.3);
 }
 
 .json-preview {
-  padding: 20px;
-  background: #2d3748;
-  border-bottom: 1px solid #4a5568;
+  padding: 24px;
+  background: linear-gradient(135deg, rgba(45, 55, 72, 0.8), rgba(26, 32, 44, 0.9));
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(99, 179, 237, 0.2);
 }
 
 .json-content {
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   font-size: 14px;
   color: #e2e8f0;
-  background: #1a202c;
-  padding: 16px;
-  border-radius: 6px;
-  border: 1px solid #4a5568;
+  background: linear-gradient(135deg, #1a202c, #2d3748);
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid rgba(66, 153, 225, 0.2);
   margin: 0;
   overflow-x: auto;
   white-space: pre;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  position: relative;
+}
+
+.json-content::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #4299e1, #63b3ed);
+  border-radius: 12px 12px 0 0;
 }
 
 .json-editor-container {
-  background: #2d3748;
+  background: linear-gradient(135deg, rgba(45, 55, 72, 0.8), rgba(26, 32, 44, 0.9));
+  backdrop-filter: blur(10px);
 }
 
 .editor-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 20px;
-  background: #4a5568;
-  border-bottom: 1px solid #718096;
+  padding: 16px 24px;
+  background: linear-gradient(135deg, rgba(74, 85, 104, 0.6), rgba(45, 55, 72, 0.8));
+  border-bottom: 1px solid rgba(99, 179, 237, 0.2);
+  backdrop-filter: blur(10px);
 }
 
 .editor-title {
-  font-weight: 600;
-  color: #e2e8f0;
-  font-size: 14px;
+  font-weight: 700;
+  color: #f1f5f9;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.editor-title::before {
+  content: '📝';
+  font-size: 18px;
 }
 
 .editor-actions {
   display: flex;
-  gap: 8px;
+  gap: 12px;
   align-items: center;
 }
 
 .save-btn {
-  background: #28a745;
+  background: linear-gradient(135deg, #10b981, #059669);
   color: white;
   border: none;
-  padding: 6px 12px;
-  border-radius: 4px;
+  padding: 8px 16px;
+  border-radius: 6px;
   cursor: pointer;
   font-size: 12px;
-  font-weight: 500;
-  transition: background 0.2s ease;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
 }
 
 .save-btn:hover:not(:disabled) {
-  background: #218838;
+  background: linear-gradient(135deg, #059669, #047857);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(16, 185, 129, 0.4);
 }
 
 .save-btn:disabled {
-  background: #6c757d;
+  background: linear-gradient(135deg, #6b7280, #4b5563);
   cursor: not-allowed;
   opacity: 0.6;
+  transform: none;
 }
 
 .cancel-btn {
-  background: #6c757d;
+  background: linear-gradient(135deg, #6b7280, #4b5563);
   color: white;
   border: none;
-  padding: 6px 12px;
-  border-radius: 4px;
+  padding: 8px 16px;
+  border-radius: 6px;
   cursor: pointer;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(107, 114, 128, 0.3);
 }
 
 .cancel-btn:hover {
-  background: #545b62;
+  background: linear-gradient(135deg, #4b5563, #374151);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(107, 114, 128, 0.4);
 }
 
 .collapse-btn {
-  background: #17a2b8;
+  background: linear-gradient(135deg, #4299e1, #3182ce);
   color: white;
   border: none;
-  padding: 6px 12px;
-  border-radius: 4px;
+  padding: 8px 16px;
+  border-radius: 6px;
   cursor: pointer;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(66, 153, 225, 0.3);
 }
 
 .collapse-btn:hover {
-  background: #138496;
+  background: linear-gradient(135deg, #3182ce, #2b77cb);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(66, 153, 225, 0.4);
 }
 
 .validation-error {
@@ -152,6 +215,8 @@
 
 .json-editor {
   padding: 0;
+  border-radius: 0 0 16px 16px;
+  overflow: hidden;
 }
 
 .json-textarea {
@@ -160,40 +225,54 @@
   max-height: 600px;
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   font-size: 14px;
-  line-height: 1.5;
-  padding: 20px;
+  line-height: 1.6;
+  padding: 24px;
   border: none;
   resize: vertical;
   outline: none;
-  background: #1a202c;
-  color: #e2e8f0;
-  border-bottom: 1px solid #4a5568;
+  background: linear-gradient(135deg, #1a202c, #2d3748);
+  color: #f1f5f9;
+  border-bottom: 1px solid rgba(99, 179, 237, 0.2);
+  transition: all 0.3s ease;
 }
 
 .json-textarea:focus {
-  background: #2d3748;
-  box-shadow: inset 0 0 0 2px rgba(99, 179, 237, 0.25);
+  background: linear-gradient(135deg, #2d3748, #374151);
+  box-shadow: 
+    inset 0 0 0 2px rgba(66, 153, 225, 0.3),
+    0 0 20px rgba(66, 153, 225, 0.1);
 }
 
 .json-textarea.error {
-  background: #742a2a;
-  border-color: #9b2c2c;
+  background: linear-gradient(135deg, #7c2d12, #991b1b);
+  border-color: #dc2626;
 }
 
 .json-textarea.error:focus {
-  box-shadow: inset 0 0 0 2px rgba(220, 53, 69, 0.25);
+  box-shadow: 
+    inset 0 0 0 2px rgba(239, 68, 68, 0.4),
+    0 0 20px rgba(239, 68, 68, 0.1);
 }
 
 .editor-footer {
-  padding: 12px 20px;
-  background: #4a5568;
-  border-top: 1px solid #718096;
+  padding: 16px 24px;
+  background: linear-gradient(135deg, rgba(74, 85, 104, 0.6), rgba(45, 55, 72, 0.8));
+  border-top: 1px solid rgba(99, 179, 237, 0.2);
+  backdrop-filter: blur(10px);
 }
 
 .format-info {
   font-size: 12px;
-  color: #a0aec0;
-  font-style: italic;
+  color: #cbd5e0;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.format-info::before {
+  content: '💡';
+  font-size: 14px;
 }
 
 /* Syntax highlighting for JSON in preview */
@@ -201,21 +280,25 @@
   tab-size: 2;
 }
 
-/* Better scrollbar for textarea */
+/* Modern scrollbar for textarea */
 .json-textarea::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 
 .json-textarea::-webkit-scrollbar-track {
-  background: #2d3748;
+  background: linear-gradient(135deg, #1a202c, #2d3748);
+  border-radius: 6px;
 }
 
 .json-textarea::-webkit-scrollbar-thumb {
-  background: #718096;
-  border-radius: 4px;
+  background: linear-gradient(135deg, #4299e1, #3182ce);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 .json-textarea::-webkit-scrollbar-thumb:hover {
-  background: #a0aec0;
+  background: linear-gradient(135deg, #3182ce, #2b77cb);
+  box-shadow: 0 0 6px rgba(66, 153, 225, 0.3);
 }

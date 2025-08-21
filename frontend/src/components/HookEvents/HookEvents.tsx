@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './HookEvents.css';
+import { Folder, Wrench } from 'lucide-react';
 
 interface HookEvent {
   id: string;
@@ -243,11 +244,11 @@ const HookEvents: React.FC = () => {
               </div>
               <div className="event-details">
                 <div className="event-project">
-                  📁 {getProjectName(event.projectPath)}
+                  <Folder size={14} style={{ marginRight: '4px' }} />{getProjectName(event.projectPath)}
                 </div>
                 {event.toolName && (
                   <div className="event-tool">
-                    🔧 {event.toolName}
+                    <Wrench size={14} style={{ marginRight: '4px' }} />{event.toolName}
                   </div>
                 )}
               </div>

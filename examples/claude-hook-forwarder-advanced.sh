@@ -51,8 +51,25 @@ PROJECT_NAME=$(basename "$CWD")
 # Read the JSON data from stdin (provided by Claude Code)
 HOOK_DATA=$(cat)
 
-# Extract hook event name from environment variable
-HOOK_EVENT_NAME="${CLAUDE_HOOK_EVENT:-Unknown}"
+# Extract hook event name from the JSON data itself (fallback to env var)
+HOOK_EVENT_NAME="Unknown"
+if command -v jq >/dev/null 2>&1; then
+    # First try to extract from the JSON data
+    JSON_EVENT_NAME=$(echo "$HOOK_DATA" | jq -r '.hook_event_name // empty' 2>/dev/null || echo "")
+    if [ -n "$JSON_EVENT_NAME" ]; then
+        HOOK_EVENT_NAME="$JSON_EVENT_NAME"
+    elif [ -n "$CLAUDE_HOOK_EVENT" ]; then
+        # Fallback to environment variable if JSON doesn't have it
+        HOOK_EVENT_NAME="$CLAUDE_HOOK_EVENT"
+    fi
+fi
+
+# DEBUG: Log event type detection for troubleshooting
+if [ "$DEBUG" = "true" ]; then
+  echo "DEBUG: CLAUDE_HOOK_EVENT=$CLAUDE_HOOK_EVENT" >&2
+  echo "DEBUG: JSON hook_event_name=$JSON_EVENT_NAME" >&2
+  echo "DEBUG: Final HOOK_EVENT_NAME=$HOOK_EVENT_NAME" >&2
+fi
 
 # Try to extract tool name from hook data if possible
 TOOL_NAME=""
@@ -112,8 +129,8 @@ fi
 # echo "$(date): Hook Event - $HOOK_EVENT_NAME - Tool: $TOOL_NAME" >> "$LOG_FILE"
 # echo "$PAYLOAD" >> "$LOG_FILE"
 
-# Forward to Claude Manager with timeout
-HTTP_STATUS=$(curl -s -w "%{http_code}" -o /dev/null -X POST \
+# Forward to Claude Manager with timeout and capture response
+RESPONSE=$(curl -s -w "HTTP_STATUS:%{http_code}" -X POST \
   -H "Content-Type: application/json" \
   -H "User-Agent: Claude-Hook-Forwarder-Advanced/1.1" \
   -H "X-Hook-Event: $HOOK_EVENT_NAME" \
@@ -122,10 +139,42 @@ HTTP_STATUS=$(curl -s -w "%{http_code}" -o /dev/null -X POST \
   -d "$PAYLOAD" \
   "$HOOK_ENDPOINT")
 
+# Extract HTTP status and response body
+HTTP_STATUS=$(echo "$RESPONSE" | grep -o "HTTP_STATUS:[0-9]*" | cut -d: -f2)
+RESPONSE_BODY=$(echo "$RESPONSE" | sed 's/HTTP_STATUS:[0-9]*$//')
+
+# Debug logging
+if [ "$DEBUG" = "true" ]; then
+    echo "$(date): [DEBUG] HTTP Status: $HTTP_STATUS" >&2
+    echo "$(date): [DEBUG] Response: $RESPONSE_BODY" >&2
+fi
+
+# Check if the hook system wants to block the tool execution
+if [ "$HTTP_STATUS" = "200" ] && command -v jq >/dev/null 2>&1; then
+    # Parse the response to see if we should block
+    SHOULD_CONTINUE=$(echo "$RESPONSE_BODY" | jq -r 'if .continue == null then true else .continue end' 2>/dev/null)
+    STOP_REASON=$(echo "$RESPONSE_BODY" | jq -r '.stopReason // empty' 2>/dev/null)
+    
+    if [ "$SHOULD_CONTINUE" = "false" ]; then
+        # Hook wants to block the tool execution
+        if [ "$DEBUG" = "true" ]; then
+            echo "$(date): [INFO] Blocking tool execution. Reason: $STOP_REASON" >&2
+        fi
+        
+        # Print the stop reason to stderr for user visibility
+        if [ -n "$STOP_REASON" ]; then
+            echo "🚫 Hook blocked tool execution: $STOP_REASON" >&2
+        fi
+        
+        # Exit with failure to block Claude Code tool execution
+        exit 1
+    fi
+fi
+
 # Log errors if debug is enabled
 if [ "$DEBUG" = "true" ] && [ "$HTTP_STATUS" != "200" ]; then
     echo "$(date): [ERROR] Failed to forward hook event. HTTP Status: $HTTP_STATUS" >&2
 fi
 
-# Always exit with success to avoid blocking Claude Code
+# Default: Allow tool execution to continue
 exit 0

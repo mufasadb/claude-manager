@@ -1,6 +1,7 @@
 import React from 'react';
 import { Project } from '../../types';
 import './ScopeSelector.css';
+import { User, Folder } from 'lucide-react';
 
 interface ScopeSelectorProps {
   selectedScope: 'user' | 'project';
@@ -26,13 +27,13 @@ const ScopeSelector: React.FC<ScopeSelectorProps> = ({
           className={`target-tab ${selectedScope === 'user' ? 'active' : ''}`}
           onClick={() => onScopeChange('user')}
         >
-          👤 User Level
+          <User size={16} style={{ marginRight: '6px' }} />User Level
         </button>
         <button
           className={`target-tab ${selectedScope === 'project' ? 'active' : ''}`}
           onClick={() => onScopeChange('project')}
         >
-          📁 Project Level
+          <Folder size={16} style={{ marginRight: '6px' }} />Project Level
         </button>
       </div>
 

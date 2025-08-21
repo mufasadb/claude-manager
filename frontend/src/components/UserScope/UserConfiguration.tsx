@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ApiService } from '../../services/ApiService';
 import UserClaudeMdEditor from './UserClaudeMdEditor';
 import './UserConfiguration.css';
+import { Edit3, Save, X, ChevronUp, Lightbulb } from 'lucide-react';
 
 interface UserConfigurationProps {
   userConfig: any;
@@ -107,7 +108,7 @@ const UserConfiguration: React.FC<UserConfigurationProps> = ({ userConfig, onRef
               className="expand-btn"
               title="Edit settings.json"
             >
-              ✏️
+              <Edit3 size={14} />
             </button>
           )}
         </div>
@@ -127,21 +128,21 @@ const UserConfiguration: React.FC<UserConfigurationProps> = ({ userConfig, onRef
                   className="save-btn"
                   title="Save changes"
                 >
-                  {isSaving ? '💾...' : '💾 Save'}
+                  {isSaving ? <><Save size={14} />...</> : <><Save size={14} style={{ marginRight: '4px' }} />Save</>}
                 </button>
                 <button
                   onClick={handleCancel}
                   className="cancel-btn"
                   title="Cancel and close"
                 >
-                  ✗ Cancel
+                  <X size={14} style={{ marginRight: '4px' }} />Cancel
                 </button>
                 <button
                   onClick={handleCollapse}
                   className="collapse-btn"
                   title="Collapse editor"
                 >
-                  ⬆️
+                  <ChevronUp size={14} />
                 </button>
               </div>
             </div>
@@ -164,7 +165,7 @@ const UserConfiguration: React.FC<UserConfigurationProps> = ({ userConfig, onRef
             
             <div className="editor-footer">
               <div className="format-info">
-                💡 Tip: Use proper JSON formatting with double quotes for keys and strings
+                <Lightbulb size={16} style={{ marginRight: '6px' }} />Tip: Use proper JSON formatting with double quotes for keys and strings
               </div>
             </div>
           </div>

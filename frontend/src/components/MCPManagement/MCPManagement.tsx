@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ApiService } from '../../services/ApiService';
 import { MCPTemplate, MCP, MCPState } from '../../types';
+import { Bot, ClipboardList, Folder, Plug, Trash2 } from 'lucide-react';
 import './MCPManagement.css';
 
 interface MCPManagementProps {
@@ -38,6 +39,7 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
   const [aiDescription, setAiDescription] = useState('');
   const [discoveryResult, setDiscoveryResult] = useState<any>(null);
   const [discoveryLoading, setDiscoveryLoading] = useState(false);
+  const [discoveredEnvVars, setDiscoveredEnvVars] = useState<Record<string, string>>({});
 
   useEffect(() => {
     loadTemplates();
@@ -234,7 +236,7 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
             </head>
             <body>
               <div class="header">
-                <h1>📋 MCP Server Logs: ${name}</h1>
+                <h1><ClipboardList size={16} style={{ marginRight: '8px' }} />MCP Server Logs: ${name}</h1>
                 <div class="stats">
                   <strong>Scope:</strong> ${logsData.scope} | 
                   <strong>Project:</strong> ${logsData.projectPath} | 
@@ -250,7 +252,7 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
                   ${logsData.searchedDirectories && logsData.searchedDirectories.length > 0 ? `
                     <div style="margin-top: 10px;">
                       <strong>Searched Directories:</strong><br>
-                      ${logsData.searchedDirectories.map(dir => `<div class="debug-info">📁 ${dir}</div>`).join('')}
+                      ${logsData.searchedDirectories.map(dir => `<div class="debug-info"><Folder size={14} style="margin-right: 4px;" />${dir}</div>`).join('')}
                     </div>
                   ` : ''}
                   
@@ -347,24 +349,39 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
     );
   };
 
-  const renderMCPRow = (mcp: MCP, isActive: boolean) => (
-    <tr key={mcp.name} className={isActive ? 'active-mcp' : 'disabled-mcp'}>
-      <td>{mcp.name}</td>
-      <td>{mcp.command}</td>
-      <td>{mcp.transport}</td>
-      <td>
-        {mcp.envVars && Object.keys(mcp.envVars).length > 0 ? (
-          <span className="env-count">{Object.keys(mcp.envVars).length} vars</span>
-        ) : (
-          <span className="no-env">None</span>
-        )}
-      </td>
-      <td>
-        <span className={`status ${isActive ? 'enabled' : 'disabled'}`}>
-          {isActive ? 'Enabled' : 'Disabled'}
-        </span>
-      </td>
-      <td className="actions">
+  const renderMCPCard = (mcp: MCP, isActive: boolean) => (
+    <div key={mcp.name} className={`mcp-card ${isActive ? 'active-mcp' : 'disabled-mcp'}`}>
+      <div className="mcp-card-header">
+        <div className="mcp-card-icon">
+          <Plug size={16} />
+        </div>
+        <div className="mcp-card-info">
+          <h4 className="mcp-card-name">{mcp.name}</h4>
+          <p className="mcp-card-command">{mcp.command}</p>
+          <div className={`mcp-status-badge ${isActive ? 'enabled' : 'disabled'}`}>
+            {isActive ? 'Enabled' : 'Disabled'}
+          </div>
+        </div>
+      </div>
+      
+      <div className="mcp-card-details">
+        <div className="mcp-detail-item">
+          <span className="mcp-detail-label">Transport</span>
+          <span className="mcp-detail-value">{mcp.transport}</span>
+        </div>
+        <div className="mcp-detail-item">
+          <span className="mcp-detail-label">Environment</span>
+          <span className="mcp-detail-value">
+            {mcp.envVars && Object.keys(mcp.envVars).length > 0 ? (
+              <span className="env-count">{Object.keys(mcp.envVars).length} vars</span>
+            ) : (
+              <span className="no-env">None</span>
+            )}
+          </span>
+        </div>
+      </div>
+
+      <div className="mcp-card-actions">
         {isActive ? (
           <button
             onClick={() => handleDisableMCP(mcp.name)}
@@ -387,7 +404,7 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
           className="btn-logs"
           title={`View logs for ${mcp.name}`}
         >
-          📋 Logs
+          <ClipboardList size={14} style={{ marginRight: '4px' }} /> Logs
         </button>
         <button
           onClick={() => handleRemoveMCP(mcp.name)}
@@ -396,8 +413,8 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
         >
           {loadingMCP === mcp.name ? '...' : 'Delete'}
         </button>
-      </td>
-    </tr>
+      </div>
+    </div>
   );
 
   const handleAIDiscovery = async () => {
@@ -411,7 +428,7 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
       setError(null);
       setDiscoveryResult(null);
 
-      const result = await ApiService.discoverMCP(aiDescription, 'openrouter');
+      const result = await ApiService.discoverMCP(aiDescription, 'openrouter', scope, projectPath);
       setDiscoveryResult(result);
 
       if (!result.success) {
@@ -422,6 +439,13 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
     } finally {
       setDiscoveryLoading(false);
     }
+  };
+
+  const handleDiscoveredEnvVarChange = (key: string, value: string) => {
+    setDiscoveredEnvVars(prev => ({
+      ...prev,
+      [key]: value
+    }));
   };
 
   const handleAddDiscoveredMCP = async () => {
@@ -435,7 +459,16 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
       setError(null);
       setWarning(null);
 
-      const result = await ApiService.addDiscoveredMCP(scope, discoveryResult.data.template, projectPath);
+      // Include environment variables in the template before sending
+      const templateWithEnvVars = {
+        ...discoveryResult.data.template,
+        template: {
+          ...discoveryResult.data.template.template,
+          providedEnvVars: discoveredEnvVars
+        }
+      };
+
+      const result = await ApiService.addDiscoveredMCP(scope, templateWithEnvVars, projectPath);
       
       if (result.success) {
         await loadMCPs();
@@ -447,9 +480,18 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
         setShowAIDiscovery(false);
         setAiDescription('');
         setDiscoveryResult(null);
+        setDiscoveredEnvVars({});
         
-        if (result.requiresEnvVars) {
-          setError(`MCP server added but requires environment variables. Please configure: ${result.template.envVars?.map((v: any) => v.key).join(', ')}`);
+        if (result.mcpInstalled) {
+          // MCP was successfully installed
+          setError(null);
+          setWarning(`✅ Success! MCP server "${result.templateName}" has been installed and is ready to use.`);
+        } else if (result.requiresEnvVars) {
+          // MCP template was added but needs environment variables
+          setWarning(`⚠️ Template "${result.templateName}" added but requires environment variables. Please configure: ${result.envVars?.map((v: any) => v.key).join(', ')} then select it from the "Add MCP Server" dropdown.`);
+        } else if (result.templateAdded) {
+          // Template was added (fallback case)
+          setWarning(`Template "${result.templateName}" has been created. You can now select it from the MCP templates dropdown.`);
         }
       } else {
         setError(result.error || 'Failed to add discovered MCP server');
@@ -478,7 +520,7 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
             className="btn-secondary"
             disabled={loading || discoveryLoading}
           >
-            {showAIDiscovery ? 'Cancel AI' : 'Add with AI 🤖'}
+            {showAIDiscovery ? 'Cancel AI' : (<><Bot size={16} style={{ marginRight: '4px' }} /> Add with AI</>)}
           </button>
         </div>
       </div>
@@ -499,7 +541,7 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
 
       {showAIDiscovery && (
         <div className="ai-discovery-form">
-          <h4>AI-Powered MCP Discovery 🤖</h4>
+          <h4><Bot size={16} style={{ marginRight: '8px' }} />AI-Powered MCP Discovery</h4>
           <p>Describe what kind of MCP server you need, and our AI will find and configure it for you!</p>
           
           <div className="form-group">
@@ -527,6 +569,7 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
                 setShowAIDiscovery(false);
                 setAiDescription('');
                 setDiscoveryResult(null);
+                setDiscoveredEnvVars({});
               }}
               className="btn-secondary"
               disabled={discoveryLoading}
@@ -546,13 +589,35 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
                   {discoveryResult.data.template.template.envVars && discoveryResult.data.template.template.envVars.length > 0 && (
                     <div className="env-vars-needed">
                       <p><strong>Environment Variables Required:</strong></p>
-                      <ul>
+                      <div className="env-vars-inputs">
                         {discoveryResult.data.template.template.envVars.map((envVar: any, idx: number) => (
-                          <li key={idx}>
-                            <strong>{envVar.key}</strong>: {envVar.description}
-                          </li>
+                          <div key={idx} className="form-group" style={{ marginBottom: '12px' }}>
+                            <label htmlFor={`discovered-${envVar.key}`} style={{ color: '#fff', display: 'block', marginBottom: '4px' }}>
+                              {envVar.key} {envVar.required && <span style={{ color: '#f44336' }}>*</span>}
+                            </label>
+                            <input
+                              type={envVar.key.toLowerCase().includes('password') || 
+                                    envVar.key.toLowerCase().includes('token') || 
+                                    envVar.key.toLowerCase().includes('key') ? 'password' : 'text'}
+                              id={`discovered-${envVar.key}`}
+                              value={discoveredEnvVars[envVar.key] || ''}
+                              onChange={(e) => handleDiscoveredEnvVarChange(envVar.key, e.target.value)}
+                              placeholder={envVar.description}
+                              required={envVar.required}
+                              style={{
+                                width: '100%',
+                                padding: '8px 12px',
+                                backgroundColor: '#2a2a2a',
+                                color: '#fff',
+                                border: '1px solid #444',
+                                borderRadius: '4px',
+                                fontSize: '14px'
+                              }}
+                            />
+                            <small style={{ color: '#888', fontSize: '12px' }}>{envVar.description}</small>
+                          </div>
                         ))}
-                      </ul>
+                      </div>
                     </div>
                   )}
                   
@@ -671,29 +736,21 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
         {loading && !showAddForm ? (
           <div className="loading">Loading MCPs...</div>
         ) : (
-          <table className="mcp-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Command</th>
-                <th>Transport</th>
-                <th>Env Vars</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.values(mcps.active).map((mcp) => renderMCPRow(mcp, true))}
-              {Object.values(mcps.disabled).map((mcp) => renderMCPRow(mcp, false))}
-              {Object.keys(mcps.active).length === 0 && Object.keys(mcps.disabled).length === 0 && (
-                <tr>
-                  <td colSpan={6} className="no-mcps">
-                    No MCP servers configured. Click "Add MCP Server" to get started.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          <>
+            {Object.keys(mcps.active).length === 0 && Object.keys(mcps.disabled).length === 0 ? (
+              <div className="no-mcps">
+                <Plug size={16} style={{ marginRight: '8px' }} /> No MCP servers configured yet.
+                <br />
+                <br />
+                Click "Add MCP Server" to get started or try "AI Discovery" to find relevant servers automatically.
+              </div>
+            ) : (
+              <div className="mcp-cards-container">
+                {Object.values(mcps.active).map((mcp) => renderMCPCard(mcp, true))}
+                {Object.values(mcps.disabled).map((mcp) => renderMCPCard(mcp, false))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

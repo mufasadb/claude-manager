@@ -1,13 +1,14 @@
 const axios = require('axios');
 
 class OpenRouterService {
-    constructor() {
+    constructor(claudeManagerInstance = null) {
         this.baseUrl = "https://openrouter.ai/api/v1";
         this.model = "openai/gpt-5-mini";
         this.maxRetries = 3;
         this.retryDelay = 2000; // ms
         this.rateLimitDelay = 1000; // ms between requests
         this.lastRequestTime = 0;
+        this.claudeManagerInstance = claudeManagerInstance;
         
         // Create axios client with better configuration
         this.client = axios.create({
@@ -90,16 +91,111 @@ class OpenRouterService {
         }
     }
 
-    createCommandGenerationPrompt(commandName, instructions, category) {
+    createCommandGenerationPrompt(commandName, instructions, category, projectContext = null) {
         const categoryPath = category ? `${category}/` : '';
         
+        // Add project-specific context if available
+        const contextSection = projectContext ? `
+<project_context>
+PROJECT INFORMATION:
+- Name: ${projectContext.name || 'Unknown'}
+- Tech Stack: ${projectContext.framework || 'Unknown'}
+- Package Manager: ${projectContext.packageManager || 'npm'}
+- Available Scripts: ${projectContext.scripts ? projectContext.scripts.join(', ') : 'Unknown'}
+- Dependencies: ${projectContext.dependencies ? projectContext.dependencies.slice(0, 8).join(', ') : 'Unknown'}
+- File Types: ${projectContext.fileTypes ? projectContext.fileTypes.join(', ') : 'Unknown'}
+
+This context should inform your tool selections and implementation approach.
+</project_context>` : '';
+        
         return `<role>
-You are an expert Claude Code slash command architect with deep knowledge of software development workflows, prompt engineering, and command design patterns. You create professional, production-ready slash commands that follow Anthropic's best practices and community standards.
+You are an expert Claude Code slash command architect with deep knowledge of Anthropic's Claude Code CLI tool, its specific capabilities, tool permissions system, and command design patterns. You create professional, production-ready slash commands that leverage Claude Code's actual tools and follow Anthropic's documented best practices.
 </role>
 
+<claude_code_context>
+Claude Code is Anthropic's official CLI tool for agentic coding assistance. It provides specific tools with granular permission controls:
+
+AVAILABLE TOOLS & THEIR CAPABILITIES:
+1. **Read** - Read file contents (supports glob patterns)
+   - Permission syntax: Read(file-pattern) e.g., Read(src/**/*.js), Read(~/.config)
+   - Use for: Examining code, configs, documentation
+
+2. **Write** - Create new files with content
+   - Permission syntax: Write(file-pattern) e.g., Write(src/new-file.js)  
+   - Use for: Creating new files, initial implementations
+
+3. **Edit** - Modify existing files with string replacement
+   - Permission syntax: Edit(file-pattern) e.g., Edit(src/**/*.ts)
+   - Use for: Code modifications, bug fixes, refactoring
+
+4. **MultiEdit** - Edit multiple files simultaneously
+   - Permission syntax: MultiEdit(file-pattern)
+   - Use for: Cross-file refactoring, consistent changes
+
+5. **Bash** - Execute shell commands with granular permissions
+   - Permission syntax: Bash(command-pattern) e.g., Bash(git add:*), Bash(npm run test:*)
+   - Common patterns:
+     * Bash(git add:*, git commit:*, git push:*) - Git operations
+     * Bash(npm run:*, yarn:*) - Package manager commands  
+     * Bash(docker:*) - Docker operations
+     * Bash(find:*, grep:*) - File search operations
+   - Security: Avoid dangerous patterns like Bash(rm:*), Bash(sudo:*)
+
+6. **Grep** - Search file contents with patterns
+   - Permission syntax: Grep (no specific permissions needed)
+   - Use for: Finding code patterns, searching codebases
+
+7. **Glob** - Find files by patterns  
+   - Permission syntax: Glob (no specific permissions needed)
+   - Use for: File discovery, pattern matching
+
+8. **LS** - List directory contents
+   - Permission syntax: LS (no specific permissions needed)
+   - Use for: Exploring project structure
+
+9. **NotebookEdit** - Edit Jupyter notebooks
+   - Permission syntax: NotebookEdit(file-pattern)
+   - Use for: Data science, ML workflows
+
+10. **WebFetch** - Fetch web content (restricted domains)
+    - Permission syntax: WebFetch(domain:example.com)
+    - Use for: API calls, documentation fetching
+
+11. **MCP Tools** - Model Context Protocol servers
+    - Permission syntax: mcp__server-name__tool-name or mcp__server-name
+    - Examples: mcp__github__get_issue, mcp__supabase__query
+    - Use for: External service integrations
+
+PERMISSION BEST PRACTICES:
+- Use specific command patterns instead of wildcards: Bash(git status) vs Bash(*)
+- Combine related permissions: ["Bash(git add:*, git commit:*, git push:*)", "Read", "Edit(src/**)"]
+- Include safety constraints: Avoid Bash(rm:*), Bash(sudo:*), Edit(/etc/**)
+- Use file patterns: Edit(src/**/*.js) instead of Edit(*)
+- Scope permissions to minimum required: Read(package.json) vs Read(*)
+
+COMMAND STRUCTURE REQUIREMENTS:
+1. YAML frontmatter with specific permissions
+2. Clear H1 title using command name
+3. Concise description paragraph  
+4. ## Process section with numbered steps
+5. ## Arguments section with $ARGUMENTS placeholder
+6. ## Implementation section with detailed Claude instructions
+7. ## Usage Notes with practical guidance
+8. ## Examples with realistic command invocations
+
+COMMAND EXECUTION CONTEXT:
+- Commands run in project directories with access to git, npm/yarn, common dev tools
+- Claude can read project files to understand context (package.json, README, etc.)
+- File operations are persistent - changes are saved to disk
+- Bash commands execute in the project's working directory
+- Claude maintains context across multiple tool calls in a single command
+</claude_code_context>
+
 <task>
-Create a high-quality Claude Code slash command based on the user's requirements.
+Create a high-quality Claude Code slash command that leverages Claude Code's specific tools and follows Anthropic's documented patterns and permission system.
 </task>
+
+${contextSection}
 
 <input>
 <command_name>${commandName}</command_name>
@@ -108,71 +204,58 @@ Create a high-quality Claude Code slash command based on the user's requirements
 </input>
 
 <requirements>
-1. Follow Claude Code slash command best practices from Anthropic documentation
-2. Use proper YAML frontmatter with specific tool permissions (not generic tools)
-3. Create actionable, step-by-step instructions that Claude can execute
+1. Use ONLY Claude Code's actual tools with proper permission syntax
+2. Include specific, minimal permissions (not generic wildcards)
+3. Create step-by-step instructions that Claude can execute autonomously
 4. Include $ARGUMENTS placeholder for dynamic parameters
-5. Write clear, professional descriptions that explain the command's value
-6. Structure commands for consistency and reusability
-7. Include proper error handling and validation guidance
-8. Add relevant usage examples and best practices
+5. Write actionable implementation steps with error handling
+6. Add realistic usage examples with actual command syntax
+7. Consider security implications and use safe permission patterns
+8. Follow Anthropic's documented command structure patterns
 </requirements>
 
-<best_practices>
-- Use specific allowed-tools like ["Bash(git add:*, git commit:*, git push:*)", "Read", "Write", "Edit"] instead of generic tool lists
-- Write descriptions that are concise but complete (10-50 words)
-- Create commands that work well with $ARGUMENTS substitution
-- Include proper markdown structure with H1 title, H2 sections
-- Add usage examples that show realistic scenarios
-- Consider security implications and include safety notes
-- Make commands self-contained and context-aware
-- Follow naming conventions from professional command collections
-</best_practices>
+<real_world_examples>
+Based on Anthropic documentation, here are proven patterns:
 
-<examples>
-<example_frontmatter>
+DEVELOPMENT WORKFLOW COMMAND:
 ---
-description: "Perform comprehensive code review with security analysis and suggestions"
-allowed-tools: ["Read", "Grep", "Bash(npm run lint:*, npm run test:*)", "Write"]
-argument-hint: "[file-pattern or 'all']"
+description: "Deploy feature branch with automated testing and rollback capability"
+allowed-tools: ["Bash(git status, git add:*, git commit:*, git push:*)", "Bash(npm run test:*, npm run build:*)", "Read(package.json)", "Edit(package.json)"]
 ---
-</example_frontmatter>
 
-<example_structure>
-# Code Review Assistant
+CODEBASE ANALYSIS COMMAND:
+---  
+description: "Analyze code quality and security with detailed reporting"
+allowed-tools: ["Read(src/**)", "Grep", "Bash(npm run lint:*, npm audit:*)", "Write(reports/*.md)"]
+---
 
-Performs a thorough code review including security analysis, best practices validation, and improvement suggestions.
+FILE MANAGEMENT COMMAND:
+---
+description: "Refactor component structure with automatic import updates"  
+allowed-tools: ["Read(src/**/*.tsx)", "Edit(src/**/*.tsx)", "MultiEdit", "Bash(find src:*)"]
+---
+</real_world_examples>
 
-## Process
+<implementation_guidance>
+When writing the ## Implementation section:
 
-1. Analyze code structure and patterns
-2. Check for security vulnerabilities and anti-patterns
-3. Validate coding standards and conventions
-4. Generate actionable improvement recommendations
-5. Create summary report with findings
+1. **Context Reading**: Start with Read() to understand project structure
+2. **Validation**: Use Bash() or Grep to validate preconditions  
+3. **Core Logic**: Execute main operations with Edit/Write/MultiEdit
+4. **Verification**: Use Read() or Bash() to verify results
+5. **Error Handling**: Include fallback strategies and user messaging
+6. **Cleanup**: Ensure consistent state with git operations if needed
 
-## Arguments
-
-Review target: $ARGUMENTS
-
-## Implementation
-
-[Detailed step-by-step instructions for Claude to follow]
-
-## Usage Notes
-
-- Works best with specific file patterns or 'all' for full codebase review
-- Automatically detects project type and applies relevant standards
-- Includes both automated checks and manual analysis
-
-## Examples
-
-\`\`\`bash
-/dev:code-review src/components/*.tsx
-/dev:code-review all
-\`\`\`
-</example_structure>
-</examples>
+Example Implementation Flow:
+\\\`\\\`\\\`
+1. Read package.json and project files to understand structure
+2. Use Grep to find relevant code patterns  
+3. Validate preconditions with Bash(git status)
+4. Execute main changes with Edit() or MultiEdit()
+5. Run tests with Bash(npm run test) to verify changes
+6. Commit changes with Bash(git add:*, git commit:*)
+\\\`\\\`\\\`
+</implementation_guidance>
 
 <output_format>
 Respond with a JSON object using this exact structure. 
@@ -190,11 +273,11 @@ Start your response with just the opening brace:
     "description": "Concise description (10-50 words) of what this command accomplishes",
     "content": "Complete markdown content with proper YAML frontmatter, sections, and examples - ensure all quotes are escaped",
     "suggestedCategory": "Recommended category based on command purpose",
-    "allowedTools": ["Specific tools with permissions rather than generic tools"],
+    "allowedTools": ["Specific Claude Code tools with granular permissions"],
     "argumentHint": "Optional hint about expected argument format",
     "metadata": {
       "complexity": "simple|moderate|advanced",
-      "useCase": "Primary use case category",
+      "useCase": "Primary use case category", 
       "estimatedTime": "Expected execution time"
     }
   }
@@ -202,11 +285,11 @@ Start your response with just the opening brace:
 </output_format>`;
     }
 
-    async generateSlashCommand(commandName, instructions, category = null) {
+    async generateSlashCommand(commandName, instructions, category = null, projectContext = null) {
         this.validateApiKey();
 
         return this.withRetry(async () => {
-            const prompt = this.createCommandGenerationPrompt(commandName, instructions, category);
+            const prompt = this.createCommandGenerationPrompt(commandName, instructions, category, projectContext);
 
             console.log('Generating slash command with OpenRouter...');
             
@@ -372,7 +455,7 @@ Start your response with just the opening brace:
         });
     }
 
-    // Generate JavaScript hook code using OpenRouter
+    // Generate JavaScript hook code using OpenRouter with enhanced context
     async generateHookCode(hookRequest) {
         const {
             eventType,
@@ -391,8 +474,17 @@ Start your response with just the opening brace:
             const serviceUrls = serviceConfig.getAllServiceUrls();
             const ollamaUrl = availableServices.ollama || serviceUrls.ollama;
             const ttsUrl = availableServices.tts || serviceUrls.tts;
+            
+            // Gather comprehensive context for better LLM generation
+            const enhancedContext = await this.gatherEnhancedContext(hookRequest);
 
             const prompt = `You are generating JavaScript code for Claude Code's hook system.
+
+${enhancedContext.projectContext}
+${enhancedContext.environmentContext}
+${enhancedContext.exampleContext}
+${enhancedContext.eventSpecificContext}
+${enhancedContext.securityContext}
 
 CLAUDE CODE HOOK SYSTEM EXPLANATION:
 
@@ -571,6 +663,316 @@ Return only the JavaScript code without markdown formatting or explanations. The
         });
     }
 
+    // Gather comprehensive context for enhanced hook generation
+    async gatherEnhancedContext(hookRequest) {
+        const {
+            eventType,
+            pattern,
+            scope,
+            projectInfo,
+            userEnv,
+            availableServices
+        } = hookRequest;
+
+        let context = {
+            projectContext: '',
+            environmentContext: '',
+            exampleContext: '',
+            eventSpecificContext: '',
+            securityContext: ''
+        };
+
+        try {
+            // PROJECT CONTEXT
+            if (projectInfo && projectInfo.path) {
+                context.projectContext = await this.buildProjectContext(projectInfo);
+            } else {
+                context.projectContext = `PROJECT CONTEXT:
+Scope: ${scope} (global user-level hook)
+No specific project context available.`;
+            }
+
+            // ENVIRONMENT CONTEXT
+            context.environmentContext = await this.buildEnvironmentContext(userEnv, availableServices);
+
+            // EXAMPLE CONTEXT - Real hooks from the system
+            context.exampleContext = await this.buildExampleContext(eventType, scope, projectInfo);
+
+            // EVENT-SPECIFIC CONTEXT
+            context.eventSpecificContext = this.buildEventSpecificContext(eventType, pattern);
+
+            // SECURITY CONTEXT
+            context.securityContext = this.buildSecurityContext(eventType);
+
+        } catch (error) {
+            console.warn('Error gathering enhanced context:', error.message);
+        }
+
+        return context;
+    }
+
+    // Build comprehensive project context
+    async buildProjectContext(projectInfo) {
+        const fs = require('fs-extra');
+        const path = require('path');
+        
+        let context = `PROJECT CONTEXT:
+Project: ${projectInfo.name}
+Path: ${projectInfo.path}
+`;
+
+        try {
+            // Read project's CLAUDE.md if it exists
+            const claudeMdPath = path.join(projectInfo.path, 'CLAUDE.md');
+            if (await fs.pathExists(claudeMdPath)) {
+                const claudeMd = await fs.readFile(claudeMdPath, 'utf8');
+                const preview = claudeMd.length > 500 ? claudeMd.substring(0, 500) + '...' : claudeMd;
+                context += `\nProject Instructions (CLAUDE.md):\n${preview}\n`;
+            }
+
+            // Read package.json to understand tech stack
+            const packageJsonPath = path.join(projectInfo.path, 'package.json');
+            if (await fs.pathExists(packageJsonPath)) {
+                const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf8'));
+                context += `\nTech Stack (package.json):\n`;
+                context += `- Framework: ${this.detectFramework(packageJson)}\n`;
+                if (packageJson.scripts) {
+                    const keyScripts = Object.keys(packageJson.scripts)
+                        .filter(script => ['dev', 'build', 'test', 'lint', 'start'].includes(script))
+                        .slice(0, 5);
+                    context += `- Available Scripts: ${keyScripts.join(', ')}\n`;
+                }
+                if (packageJson.dependencies) {
+                    const keyDeps = Object.keys(packageJson.dependencies).slice(0, 10);
+                    context += `- Key Dependencies: ${keyDeps.join(', ')}\n`;
+                }
+            }
+
+            // Detect common file patterns in project
+            const commonPatterns = await this.detectFilePatterns(projectInfo.path);
+            if (commonPatterns.length > 0) {
+                context += `\nCommon File Types: ${commonPatterns.join(', ')}\n`;
+            }
+
+            // Check for existing hooks in project
+            const existingHooks = await this.getExistingProjectHooks(projectInfo.path);
+            if (existingHooks.length > 0) {
+                context += `\nExisting Project Hooks: ${existingHooks.length} hooks already configured\n`;
+            }
+
+        } catch (error) {
+            context += `\nWarning: Could not read full project context: ${error.message}\n`;
+        }
+
+        return context;
+    }
+
+    // Build environment and services context
+    async buildEnvironmentContext(userEnv, availableServices) {
+        const { serviceConfig } = require('../utils/service-config');
+        const serviceUrls = serviceConfig.getAllServiceUrls();
+        
+        let context = `ENVIRONMENT CONTEXT:\n`;
+        context += `- Ollama Service: ${availableServices.ollama || serviceUrls.ollama} ${await this.checkServiceAvailability(serviceUrls.ollama) ? '✅' : '❌'}\n`;
+        context += `- TTS Service: ${availableServices.tts || serviceUrls.tts} ${await this.checkServiceAvailability(serviceUrls.tts) ? '❌' : '❌'}\n`;
+        
+        // Check for active MCP servers if claudeManagerInstance is available
+        if (this.claudeManagerInstance?.mcpService) {
+            const mcpState = this.claudeManagerInstance.mcpService.getState();
+            const activeMCPs = Object.keys(mcpState.userMCPs?.active || {});
+            if (activeMCPs.length > 0) {
+                context += `- Active MCP Servers: ${activeMCPs.join(', ')}\n`;
+            }
+        }
+        
+        // Safe environment variables (non-sensitive)
+        const safeEnvVars = Object.keys(userEnv).filter(key => 
+            !key.toUpperCase().includes('KEY') && 
+            !key.toUpperCase().includes('TOKEN') && 
+            !key.toUpperCase().includes('SECRET')
+        );
+        if (safeEnvVars.length > 0) {
+            context += `- Available Environment Variables: ${safeEnvVars.slice(0, 5).join(', ')}\n`;
+        }
+        
+        return context;
+    }
+
+    // Build examples from actual hooks in the system
+    async buildExampleContext(eventType, scope, projectInfo) {
+        let context = `REAL HOOK EXAMPLES:\n`;
+        
+        try {
+            const fs = require('fs-extra');
+            const path = require('path');
+            const os = require('os');
+            
+            // Look for existing hooks that match the event type
+            const hooksDir = scope === 'user' 
+                ? path.join(os.homedir(), '.claude-manager', 'hooks')
+                : projectInfo ? path.join(projectInfo.path, '.claude', 'hooks') : null;
+                
+            if (hooksDir && await fs.pathExists(hooksDir)) {
+                const hookFiles = await fs.readdir(hooksDir);
+                const relevantHooks = hookFiles.filter(file => 
+                    file.endsWith('.js') && file.toLowerCase().includes(eventType.toLowerCase())
+                ).slice(0, 2); // Limit to 2 examples
+                
+                for (const hookFile of relevantHooks) {
+                    try {
+                        const hookContent = await fs.readFile(path.join(hooksDir, hookFile), 'utf8');
+                        const preview = hookContent.length > 300 ? hookContent.substring(0, 300) + '...' : hookContent;
+                        context += `\nExample from ${hookFile}:\n\`\`\`javascript\n${preview}\n\`\`\`\n`;
+                    } catch (error) {
+                        // Skip unreadable hooks
+                    }
+                }
+            }
+            
+            // If no real examples, provide targeted template
+            if (!context.includes('```javascript')) {
+                context += this.getTargetedTemplate(eventType);
+            }
+            
+        } catch (error) {
+            // Fallback to generic template
+            context += this.getTargetedTemplate(eventType);
+        }
+        
+        return context;
+    }
+
+    // Build event-specific context with common patterns
+    buildEventSpecificContext(eventType, pattern) {
+        let context = `EVENT-SPECIFIC CONTEXT:\n`;
+        context += `Target Event: ${eventType}\n`;
+        context += `Pattern Match: ${pattern}\n`;
+        
+        // Add event-specific guidance
+        const eventGuidance = {
+            'PreToolUse': {
+                purpose: 'Runs BEFORE Claude executes a tool - perfect for validation, backups, warnings',
+                commonPatterns: ['File backup before Write/Edit', 'Dangerous command validation', 'Environment checks'],
+                dataAvailable: 'hookEvent.toolName, hookEvent.filePaths (intended targets), hookEvent.originalHookData (full command details)'
+            },
+            'PostToolUse': {
+                purpose: 'Runs AFTER Claude completes a tool - perfect for cleanup, git operations, notifications',
+                commonPatterns: ['Auto-commit after file changes', 'Format code after edits', 'Update documentation'],
+                dataAvailable: 'hookEvent.toolName, hookEvent.filePaths (actual files modified), hookEvent.context (results)'
+            },
+            'Notification': {
+                purpose: 'Runs when Claude sends status messages - perfect for user experience improvements',
+                commonPatterns: ['Text-to-speech for all messages', 'Important message highlighting', 'External integrations'],
+                dataAvailable: 'hookEvent.context.message (the notification text)'
+            },
+            'Stop': {
+                purpose: 'Runs when Claude completes a task - perfect for completion feedback',
+                commonPatterns: ['Success sounds', 'Session summaries', 'Task completion notifications'],
+                dataAvailable: 'hookEvent.context (session summary), project info if available'
+            }
+        };
+        
+        const guidance = eventGuidance[eventType];
+        if (guidance) {
+            context += `Purpose: ${guidance.purpose}\n`;
+            context += `Common Use Cases: ${guidance.commonPatterns.join(', ')}\n`;
+            context += `Data Available: ${guidance.dataAvailable}\n`;
+        }
+        
+        return context;
+    }
+
+    // Build security context and constraints
+    buildSecurityContext(eventType) {
+        let context = `SECURITY CONSTRAINTS:\n`;
+        context += `- No file system writes (read-only except for logging)\n`;
+        context += `- HTTP requests limited to approved domains (localhost, 127.0.0.1, 100.83.40.11, api.github.com)\n`;
+        context += `- No access to sensitive environment variables\n`;
+        context += `- 30-second execution timeout\n`;
+        context += `- Sandboxed Node.js VM environment\n`;
+        
+        if (eventType === 'PreToolUse') {
+            context += `- PreToolUse hooks can block execution by throwing errors\n`;
+            context += `- Use this power responsibly - only block dangerous operations\n`;
+        }
+        
+        return context;
+    }
+
+    // Utility functions
+    detectFramework(packageJson) {
+        const deps = { ...packageJson.dependencies, ...packageJson.devDependencies };
+        if (deps.react) return 'React';
+        if (deps.vue) return 'Vue';
+        if (deps.angular) return 'Angular';
+        if (deps.svelte) return 'Svelte';
+        if (deps.express) return 'Express';
+        if (deps['@nestjs/core']) return 'NestJS';
+        if (deps.fastify) return 'Fastify';
+        return 'Node.js';
+    }
+
+    async detectFilePatterns(projectPath) {
+        const fs = require('fs-extra');
+        const path = require('path');
+        const patterns = new Set();
+        
+        try {
+            const files = await fs.readdir(projectPath);
+            for (const file of files.slice(0, 20)) { // Limit to first 20 files
+                const ext = path.extname(file).toLowerCase();
+                if (ext && !['.git', '.node_modules'].includes(file)) {
+                    patterns.add(ext);
+                }
+            }
+        } catch (error) {
+            // Ignore errors
+        }
+        
+        return Array.from(patterns).slice(0, 10);
+    }
+
+    async getExistingProjectHooks(projectPath) {
+        const fs = require('fs-extra');
+        const path = require('path');
+        
+        try {
+            const hooksDir = path.join(projectPath, '.claude', 'hooks');
+            if (await fs.pathExists(hooksDir)) {
+                const files = await fs.readdir(hooksDir);
+                return files.filter(f => f.endsWith('.js'));
+            }
+        } catch (error) {
+            // Ignore errors
+        }
+        
+        return [];
+    }
+
+    async checkServiceAvailability(serviceUrl) {
+        try {
+            const axios = require('axios');
+            await axios.get(serviceUrl + '/health', { timeout: 1000 });
+            return true;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    getTargetedTemplate(eventType) {
+        const templates = {
+            'PreToolUse': `\nTemplate for PreToolUse:\n\`\`\`javascript\ntry {\n  // Check if this is a tool we want to intercept\n  if (hookEvent.toolName === 'Bash' && hookEvent.originalHookData?.command) {\n    const command = hookEvent.originalHookData.command;\n    console.log('About to execute:', command);\n    \n    // Example: Block dangerous commands\n    if (command.includes('rm -rf')) {\n      await utils.notify('Dangerous command blocked!', 'warning');\n      throw new Error('Blocked potentially dangerous command');\n    }\n    \n    // Example: Backup before file operations\n    if (hookEvent.toolName === 'Write' && hookEvent.filePaths.length > 0) {\n      await utils.notify('Creating backup before file write', 'info');\n    }\n  }\n  \n  return 'Validation completed';\n} catch (error) {\n  console.error('Hook error:', error);\n  return 'Validation failed: ' + error.message;\n}\n\`\`\`\n`,
+            
+            'PostToolUse': `\nTemplate for PostToolUse:\n\`\`\`javascript\ntry {\n  // Process completed tool operation\n  if (hookEvent.toolName === 'Write' || hookEvent.toolName === 'Edit') {\n    console.log('Files modified:', hookEvent.filePaths);\n    \n    // Example: Auto-format after code changes\n    if (hookEvent.filePaths.some(f => f.endsWith('.js') || f.endsWith('.ts'))) {\n      await utils.notify('Code files modified - consider running formatter', 'info');\n    }\n    \n    // Example: Speak completion\n    await utils.speak('File operation completed');\n  }\n  \n  return 'Post-processing completed';\n} catch (error) {\n  console.error('Hook error:', error);\n  return 'Post-processing failed: ' + error.message;\n}\n\`\`\`\n`,
+            
+            'Notification': `\nTemplate for Notification:\n\`\`\`javascript\ntry {\n  const message = hookEvent.context?.message || 'Notification received';\n  console.log('Claude notification:', message);\n  \n  // Example: Speak important notifications\n  if (message.includes('error') || message.includes('warning')) {\n    await utils.speak('Alert: ' + message);\n    await utils.playSound('warning');\n  } else {\n    await utils.playSound('info');\n  }\n  \n  return 'Notification processed';\n} catch (error) {\n  console.error('Hook error:', error);\n  return 'Notification processing failed: ' + error.message;\n}\n\`\`\`\n`,
+            
+            'Stop': `\nTemplate for Stop:\n\`\`\`javascript\ntry {\n  console.log('Claude task completed at:', new Date().toISOString());\n  \n  // Example: Success feedback\n  await utils.playSound('success');\n  await utils.speak('Task completed successfully');\n  \n  // Example: Optional AI summary\n  if (projectInfo) {\n    const summary = await utils.askOllama(\n      \`Briefly summarize what was accomplished in this Claude session for project: \${projectInfo.name}\`,\n      { model: 'llama3.2:latest', max_tokens: 100 }\n    );\n    console.log('Session summary:', summary);\n    await utils.notify('Session complete: ' + summary, 'success');\n  }\n  \n  return 'Task completion processed';\n} catch (error) {\n  console.error('Hook error:', error);\n  return 'Completion processing failed: ' + error.message;\n}\n\`\`\`\n`
+        };
+        
+        return templates[eventType] || '';
+    }
+
     // Extract JavaScript code from LLM response
     extractJavaScriptCode(response) {
         if (!response || typeof response !== 'string') {
@@ -600,11 +1002,11 @@ Return only the JavaScript code without markdown formatting or explanations. The
 
     createAgentGenerationPrompt(agentName, description, availableTools, scope) {
         return `<role>
-You are an expert AI agent architect with deep knowledge of Anthropic's Constitutional AI principles, system message design patterns, and production deployment best practices. You create professional, effective agent system messages that balance capability with safety.
+You are an expert AI agent architect with deep knowledge of Anthropic's system prompt engineering, Constitutional AI principles, and Claude tool usage best practices. You create production-ready agent system messages following Anthropic's documented guidance on role definition, tool use protocols, and safety constraints.
 </role>
 
 <task>
-Create a comprehensive agent system message based on the user's requirements, incorporating both Anthropic's Constitutional AI principles and community-validated patterns for maximum effectiveness.
+Create a comprehensive agent system message based on the user's requirements, strictly following Anthropic's official guidance on system prompts, tool use, and agent design patterns for maximum effectiveness and safety.
 </task>
 
 <input>
@@ -614,56 +1016,104 @@ Create a comprehensive agent system message based on the user's requirements, in
 <scope>${scope}</scope>
 </input>
 
-<agent_design_principles>
-Based on research from Anthropic's official guidance and community best practices:
+<anthropic_guidance_integration>
+Based on Anthropic's official documentation:
 
-1. **Specific Identity**: Clear, focused role definition (not "helpful assistant")
-2. **Capability Boundaries**: Explicit what-can/cannot-do statements
-3. **Tool Usage Protocols**: When/why/how to use each available tool
-4. **Context Management**: Memory handling and conversation flow rules
-5. **Error Handling**: Primary approach → fallback strategies → escalation
-6. **Safety Constraints**: Constitutional AI principles + domain-specific rules
-7. **Quality Validation**: Self-checking mechanisms and success criteria
-8. **Anti-Pattern Prevention**: Avoid God Agent, Context Explosion, Tool Dumping
-</agent_design_principles>
+**System Prompt Design (from docs.anthropic.com/system-prompts):**
+- Transform Claude "from a general assistant into your virtual domain expert"
+- Use specific, nuanced role definitions (not generic "helpful assistant")
+- Define precise expertise and professional perspective
+- Align role closely with specific analytical/problem-solving needs
+
+**Tool Use Best Practices (from docs.anthropic.com/tool-use):**
+- Claude decides when to use tools based on clear descriptions
+- Provide tool details: name, description, input schema
+- Implement proper tool call workflow: decision → execution → result integration
+- Handle tool failures gracefully with fallback strategies
+
+**Prompt Engineering Principles (from docs.anthropic.com/prompt-engineering):**
+- Be clear and direct in instructions
+- Use XML tags for structure
+- Define clear success criteria
+- Employ chain of thought reasoning
+- Consider constitutional AI safety principles
+</anthropic_guidance_integration>
+
+<agent_design_framework>
+Following Anthropic's documented patterns:
+
+1. **Specific Role Definition**: Nuanced professional identity (e.g., "data scientist specializing in customer insight analysis for Fortune 500 companies")
+2. **Tool Usage Protocol**: Clear decision criteria for when/why/how to use each tool
+3. **Validation Framework**: Input validation → processing → output verification
+4. **Error Handling**: Primary approach → tool fallbacks → human escalation
+5. **Safety Integration**: Constitutional AI principles embedded throughout
+6. **Success Metrics**: Measurable effectiveness criteria
+7. **Context Management**: What to preserve, summarize, and forget
+8. **Capability Boundaries**: Explicit limitations and prohibited actions
+</agent_design_framework>
 
 <effective_patterns>
-✅ **Specialized agents** consistently outperform generalists
-✅ **Context compression** prevents performance degradation
-✅ **Tool validation chains** prevent execution errors
-✅ **Graceful degradation** maintains functionality under failure
-✅ **Constitutional constraints** ensure safe, helpful behavior
-✅ **Progressive complexity** from simple to advanced operations
-✅ **Validation sandwich** (input → process → output verification)
+✅ **Domain Expert Role**: Specific professional identity vs generic assistant
+✅ **Tool Decision Trees**: Clear criteria for tool selection and usage
+✅ **Validation Chains**: Systematic quality control at each step
+✅ **Graceful Degradation**: Maintains functionality when tools fail
+✅ **Constitutional Safety**: Safety principles integrated into core behavior
+✅ **Empirical Success**: Measurable performance criteria
+✅ **Context Compression**: Efficient memory management
+✅ **Progressive Complexity**: Simple to advanced operation flow
 </effective_patterns>
 
-<system_message_structure>
-# [Agent Name] System Message
+<system_message_template>
+You are a ${agentName} with specialized expertise in [DOMAIN]. Your role is to [SPECIFIC_PROFESSIONAL_FUNCTION] with precision and reliability.
 
-## Agent Identity
-[Specific role and expertise definition with clear domain focus]
+## Professional Identity
+[Specific professional role, expertise area, and unique value proposition]
 
 ## Core Capabilities
-[3-5 main capabilities with specific examples and use cases]
+[3-5 specific capabilities with concrete examples and measurable outcomes]
 
-## Tool Usage Guidelines
-[For each available tool: when to use, why to use, how to use, validation steps]
+## Tool Usage Protocol
+For each available tool, you follow this decision framework:
+- **When to use**: Specific triggers and conditions
+- **Why to use**: Expected outcomes and value
+- **How to use**: Step-by-step protocol with validation
+- **Fallback**: Alternative approaches when tool fails
 
-## Context Management Rules
-[What to preserve, summarize, forget; memory limits and compression strategies]
+[Specific tool protocols for each available tool]
+
+## Quality Assurance Framework
+Before any response, you:
+1. Validate input completeness and clarity
+2. Verify tool results align with expectations
+3. Check output meets success criteria
+4. Ensure safety constraints are maintained
 
 ## Error Handling Protocol
-[Primary approach, fallback strategies, escalation procedures, never-do rules]
-
-## Validation Requirements
-[Quality checks before responding, accuracy verification, completeness assessment]
+- **Primary**: [Standard operating procedure]
+- **Tool Failure**: [Specific fallback strategies for each tool]
+- **Data Issues**: [Validation and correction procedures]
+- **Escalation**: [When and how to request human intervention]
 
 ## Success Criteria
-[How to measure effectiveness, what constitutes good performance vs failure]
+- [Measurable performance indicators]
+- [Quality benchmarks]
+- [User satisfaction metrics]
 
 ## Safety Constraints
-[Constitutional AI principles, domain-specific safety rules, prohibited actions]
-</system_message_structure>
+Following Constitutional AI principles:
+- [Domain-specific safety rules]
+- [Prohibited actions and boundaries]
+- [Ethical guidelines for tool use]
+- [Privacy and security protocols]
+
+## Context Management
+- **Preserve**: [Critical information to maintain]
+- **Summarize**: [Information to compress after use]
+- **Forget**: [Irrelevant or sensitive data to discard]
+- **Limits**: [Maximum context size and management strategies]
+
+Remember: You are a domain expert, not a general assistant. Your responses should reflect deep professional knowledge while maintaining rigorous safety standards.
+</system_message_template>
 
 <output_format>
 Respond with a JSON object using this exact structure. Use JSON prefilling - start your response with just the opening brace:
@@ -671,17 +1121,17 @@ Respond with a JSON object using this exact structure. Use JSON prefilling - sta
 {
   "success": true,
   "data": {
-    "systemMessage": "Complete, professional system message following the structure above",
-    "agentSummary": "2-3 sentence summary of what this agent does and its key strengths",
-    "recommendedTools": ["Most important tools for this agent from the available list"],
-    "suggestedTextFace": "Appropriate ASCII face that matches the agent's personality",
-    "suggestedColor": "Color that fits the agent's domain (e.g., '#4CAF50' for security, '#2196F3' for research)",
-    "complexity": "simple|moderate|advanced",
-    "domain": "Primary domain or field this agent operates in",
-    "riskLevel": "low|medium|high - based on potential impact of agent actions",
-    "validationChecks": ["Key validation steps this agent should perform"],
-    "commonFailures": ["Potential failure modes to watch for"],
-    "safeguards": ["Specific safety measures for this agent type"]
+    "systemMessage": "Complete, professional system message following Anthropic's guidance and the template structure above, with specific tool protocols for each available tool",
+    "agentSummary": "2-3 sentence summary emphasizing the agent's specific professional identity and core value proposition",
+    "recommendedTools": ["Most critical tools for this agent's professional function"],
+    "suggestedTextFace": "ASCII face that reflects the agent's professional personality",
+    "suggestedColor": "Professional color that matches the domain (e.g., '#4CAF50' for security, '#2196F3' for research, '#FF9800' for creative)",
+    "complexity": "simple|moderate|advanced - based on tool usage and decision complexity",
+    "domain": "Specific professional domain or field of expertise",
+    "riskLevel": "low|medium|high - based on potential impact and tool capabilities",
+    "validationChecks": ["Key validation steps following Anthropic's quality assurance patterns"],
+    "commonFailures": ["Potential failure modes and their mitigation strategies"],
+    "safeguards": ["Specific Constitutional AI safety measures for this agent type"]
   }
 }
 </output_format>`;

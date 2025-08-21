@@ -55,8 +55,13 @@ class ProjectService {
     }
   }
 
+  async reload() {
+    console.log('Reloading project registry...');
+    await this.loadRegistry();
+  }
+
   // Project Registration
-  async registerProject(name, projectPath) {
+  async registerProject(name, projectPath, statusDisplay = null) {
     if (!name || !projectPath) {
       throw new Error('Name and path are required');
     }
@@ -68,7 +73,8 @@ class ProjectService {
 
     this.state.projects[name] = {
       path: projectPath,
-      registeredAt: Date.now()
+      registeredAt: Date.now(),
+      statusDisplay: statusDisplay
     };
 
     await this.saveRegistry();
@@ -491,6 +497,31 @@ class ProjectService {
         (total, vars) => total + Object.keys(vars || {}).length, 0
       )
     };
+  }
+
+  // Status display management
+  getProjectByPath(projectPath) {
+    for (const [name, project] of Object.entries(this.state.projects)) {
+      if (project.path === projectPath) {
+        return { name, ...project };
+      }
+    }
+    return null;
+  }
+
+  getStatusDisplayByPath(projectPath) {
+    const project = this.getProjectByPath(projectPath);
+    return project?.statusDisplay || null;
+  }
+
+  async updateStatusDisplay(projectName, statusDisplay) {
+    if (!this.state.projects[projectName]) {
+      throw new Error(`Project ${projectName} not found`);
+    }
+    
+    this.state.projects[projectName].statusDisplay = statusDisplay;
+    await this.saveRegistry();
+    return this.state.projects[projectName];
   }
 }
 

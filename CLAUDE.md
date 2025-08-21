@@ -345,4 +345,23 @@ curl localhost:3455/api/status # Test API endpoint
 - **Type definitions**: `frontend/src/types.ts`
 - **Hook configurations**: `backend/config/hooks.js`
 
+## Custom Hooks System
+
+This system includes a powerful custom hooks system that allows intelligent interception and automation of Claude Code operations. 
+
+**📖 For detailed information about custom hooks, examples, and development patterns:**
+**See: [`~/.claude-manager/hooks/CLAUDE.md`](file://~/.claude-manager/hooks/CLAUDE.md)**
+
+The hooks documentation includes:
+- Complete example of the Anthropic docs interceptor hook
+- Hook development patterns and best practices  
+- Metadata system for auto-discovery
+- Testing and debugging guidance
+- Multiple real-world hook examples
+
+**Key Hook Locations:**
+- **User hooks**: `~/.claude-manager/hooks/` (active hooks)
+- **Disabled hooks**: `~/.claude-manager/hooks/disabled/`
+- **Hook templates**: `backend/config/hooks.js`
+
 This system is designed for real-time collaboration and management of Claude Code across multiple projects. The key is understanding the dual-scope architecture (user vs project), the centralized state management, and the real-time WebSocket communication pattern.

@@ -7,10 +7,11 @@ const { promisify } = require('util');
 const execAsync = promisify(exec);
 
 class MCPService {
-  constructor(claudeConfigReader = null) {
+  constructor(claudeConfigReader = null, projectService = null) {
     this.registryPath = path.join(os.homedir(), '.claude-manager');
     this.savedMCPConfigsFile = path.join(this.registryPath, 'saved-mcp-configs.json');
     this.claudeConfigReader = claudeConfigReader;
+    this.projectService = projectService;
     
     // Initialize state
     this.state = {
@@ -137,19 +138,19 @@ class MCPService {
   // Configuration Management
   async loadMCPConfig() {
     try {
-      // Always get live active MCPs from Claude CLI (source of truth)
-      const activeMCPs = await this.getActiveMCPsFromClaude();
+      // Get all MCPs and separate by scope
+      const allMCPs = await this.getAllMCPsWithScope();
       
       // Load saved configs (disabled/backup MCPs) from our separate file
       const savedConfigs = await this.loadSavedMCPConfigs();
 
       this.state = {
         userMCPs: {
-          active: activeMCPs,
+          active: allMCPs.user || {},
           saved: savedConfigs.user || {}
         },
         projectMCPs: {
-          active: {},  // TODO: Add project-scoped MCP support later
+          active: allMCPs.project || {},
           saved: savedConfigs.project || {}
         }
       };
@@ -170,18 +171,64 @@ class MCPService {
     }
   }
 
-  async getActiveMCPsFromClaude() {
+  async getAllMCPsWithScope() {
     try {
-      // Execute claude mcp list from user's Code directory to avoid project-specific context
+      // First get all MCPs
       const { stdout } = await execAsync('claude mcp list', { 
         cwd: path.join(os.homedir(), 'Code')
       });
       
-      return this.parseMCPListOutput(stdout);
+      const allMCPs = this.parseMCPListOutput(stdout);
+      
+      // Now get detailed info for each MCP to determine scope
+      const scopedMCPs = {
+        user: {},
+        project: {},
+        local: {}
+      };
+      
+      for (const [mcpName, mcpData] of Object.entries(allMCPs)) {
+        try {
+          const { stdout: detailOutput } = await execAsync(`claude mcp get "${mcpName}"`, {
+            cwd: path.join(os.homedir(), 'Code')
+          });
+          
+          const scope = this.extractScopeFromMcpGet(detailOutput);
+          if (scope === 'user') {
+            scopedMCPs.user[mcpName] = mcpData;
+          } else if (scope === 'project') {
+            scopedMCPs.project[mcpName] = mcpData;
+          } else {
+            scopedMCPs.local[mcpName] = mcpData;
+          }
+        } catch (error) {
+          console.warn(`Could not get scope info for MCP '${mcpName}':`, error.message);
+          // Default to user scope if we can't determine
+          scopedMCPs.user[mcpName] = mcpData;
+        }
+      }
+      
+      return scopedMCPs;
     } catch (error) {
-      console.error('Error getting MCPs from Claude CLI:', error);
-      return {};
+      console.error('Error getting MCPs with scope:', error);
+      return { user: {}, project: {}, local: {} };
     }
+  }
+
+  extractScopeFromMcpGet(output) {
+    const lines = output.split('\n');
+    for (const line of lines) {
+      if (line.includes('Scope:')) {
+        if (line.includes('User config')) {
+          return 'user';
+        } else if (line.includes('Project config')) {
+          return 'project';
+        } else if (line.includes('Local config')) {
+          return 'local';
+        }
+      }
+    }
+    return 'user'; // Default fallback
   }
 
   parseMCPListOutput(output) {
@@ -268,7 +315,7 @@ class MCPService {
 
 
   // MCP Management via Claude CLI
-  async addMCP(scope, mcpConfig) {
+  async addMCP(scope, mcpConfig, projectPath = null) {
     const { name, command, envVars = {}, args = [] } = mcpConfig;
     
     // Validate required fields
@@ -277,8 +324,13 @@ class MCPService {
     }
 
     try {
-      // Build Claude CLI command: claude mcp add -s user name -e KEY=value -- command args
-      let cliCommand = `claude mcp add -s ${scope} "${name}"`;
+      // Build Claude CLI command: claude mcp add --scope user name command args
+      let cliCommand = `claude mcp add --scope ${scope} "${name}" ${command}`;
+      
+      // Add args
+      if (args && args.length > 0) {
+        cliCommand += ` ${args.join(' ')}`;
+      }
       
       // Add environment variables
       if (envVars && Object.keys(envVars).length > 0) {
@@ -286,18 +338,15 @@ class MCPService {
           cliCommand += ` -e ${key}="${value}"`;
         }
       }
-      
-      // Add command and args
-      cliCommand += ` -- ${command}`;
-      if (args && args.length > 0) {
-        cliCommand += ` ${args.join(' ')}`;
-      }
 
       console.log(`Executing Claude CLI command: ${cliCommand}`);
       
-      const { stdout, stderr } = await execAsync(cliCommand, {
-        cwd: path.join(os.homedir(), 'Code')  // Execute from user level
-      });
+      // Execute from project directory if scope is project, otherwise from user level
+      const executionDir = scope === 'project' && projectPath 
+        ? projectPath 
+        : path.join(os.homedir(), 'Code');
+      
+      const { stdout, stderr } = await execAsync(cliCommand, { cwd: executionDir });
 
       if (stderr && !stderr.includes('Added MCP server')) {
         console.warn(`Claude CLI warning: ${stderr}`);
@@ -313,16 +362,19 @@ class MCPService {
     }
   }
 
-  async removeMCP(scope, name) {
+  async removeMCP(scope, name, projectPath = null) {
     try {
-      // Direct Claude CLI command: claude mcp remove "name" -s user
-      const cliCommand = `claude mcp remove "${name}" -s ${scope}`;
+      // Direct Claude CLI command: claude mcp remove "name" --scope user
+      const cliCommand = `claude mcp remove "${name}" --scope ${scope}`;
 
       console.log(`Executing Claude CLI command: ${cliCommand}`);
       
-      const { stdout, stderr } = await execAsync(cliCommand, {
-        cwd: path.join(os.homedir(), 'Code')  // Execute from user level
-      });
+      // Execute from project directory if scope is project, otherwise from user level
+      const executionDir = scope === 'project' && projectPath 
+        ? projectPath 
+        : path.join(os.homedir(), 'Code');
+      
+      const { stdout, stderr } = await execAsync(cliCommand, { cwd: executionDir });
 
       if (stderr && !stderr.includes('Removed MCP server')) {
         console.warn(`Claude CLI warning: ${stderr}`);
@@ -347,10 +399,17 @@ class MCPService {
     }
   }
 
-  async disableMCP(scope, name) {
+  async disableMCP(scope, name, projectPath = null) {
     // First check if MCP is currently active in Claude
-    const activeMCPs = await this.getActiveMCPsFromClaude();
-    const mcpData = activeMCPs[name];
+    let activeMCPs, mcpData;
+    
+    if (scope === 'project' && projectPath) {
+      activeMCPs = await this.getActiveMCPsFromProject(projectPath);
+      mcpData = activeMCPs[name];
+    } else {
+      activeMCPs = await this.getActiveMCPsFromClaude();
+      mcpData = activeMCPs[name];
+    }
 
     if (!mcpData) {
       throw new Error(`MCP '${name}' is not currently active in Claude CLI.`);
@@ -365,13 +424,18 @@ class MCPService {
         envVars: {}, // We'll need to get this from claude mcp get
         transport: mcpData.transport,
         disabledAt: Date.now(),
-        source: 'disabled_from_active'
+        source: 'disabled_from_active',
+        projectPath: projectPath || null
       };
 
       // Try to get environment variables from claude mcp get
       try {
+        const executionDir = scope === 'project' && projectPath 
+          ? projectPath 
+          : path.join(os.homedir(), 'Code');
+          
         const { stdout: detailOutput } = await execAsync(`claude mcp get "${name}"`, {
-          cwd: path.join(os.homedir(), 'Code')
+          cwd: executionDir
         });
         const envVars = this.parseEnvVarsFromMcpGet(detailOutput);
         savedConfig.envVars = envVars;
@@ -389,12 +453,14 @@ class MCPService {
       await this.saveSavedMCPConfigs();
 
       // Remove from Claude CLI
-      const cliCommand = `claude mcp remove "${name}" -s ${scope}`;
+      const cliCommand = `claude mcp remove "${name}" --scope ${scope}`;
       console.log(`Executing Claude CLI command: ${cliCommand}`);
       
-      const { stdout, stderr } = await execAsync(cliCommand, {
-        cwd: path.join(os.homedir(), 'Code')
-      });
+      const executionDir = scope === 'project' && projectPath 
+        ? projectPath 
+        : path.join(os.homedir(), 'Code');
+      
+      const { stdout, stderr } = await execAsync(cliCommand, { cwd: executionDir });
 
       if (stderr && !stderr.includes('Removed MCP server')) {
         console.warn(`Claude CLI warning: ${stderr}`);
@@ -435,7 +501,7 @@ class MCPService {
     return envVars;
   }
 
-  async enableMCP(scope, name) {
+  async enableMCP(scope, name, projectPath = null) {
     try {
       // Check if MCP is in our saved configs
       let savedConfig;
@@ -467,9 +533,12 @@ class MCPService {
 
       console.log(`Executing Claude CLI command: ${cliCommand}`);
       
-      const { stdout, stderr } = await execAsync(cliCommand, {
-        cwd: path.join(os.homedir(), 'Code')
-      });
+      // Use saved project path or provided project path for project-scoped MCPs
+      const executionDir = scope === 'project' && (projectPath || savedConfig.projectPath)
+        ? (projectPath || savedConfig.projectPath)
+        : path.join(os.homedir(), 'Code');
+      
+      const { stdout, stderr } = await execAsync(cliCommand, { cwd: executionDir });
 
       if (stderr && !stderr.includes('Added MCP server')) {
         console.warn(`Claude CLI warning: ${stderr}`);

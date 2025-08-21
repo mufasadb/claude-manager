@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ApiService } from '../../services/ApiService';
 import { AgentFormData, Agent, AgentTemplate } from '../../types';
+import { Target, Wrench, Lightbulb, BookOpen, AlertTriangle } from 'lucide-react';
 
 interface AgentCreatorProps {
   projects: Record<string, any>;
@@ -33,6 +34,13 @@ const AgentCreator: React.FC<AgentCreatorProps> = ({ projects }) => {
   const [availableTools, setAvailableTools] = useState<string[]>([]);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorModalContent, setErrorModalContent] = useState<{
+    title: string;
+    message: string;
+    details?: string[];
+    troubleshooting?: string[];
+  }>({ title: '', message: '' });
 
   // Tool categorization helper
   const categorizeTools = (tools: string[]) => {
@@ -141,9 +149,30 @@ const AgentCreator: React.FC<AgentCreatorProps> = ({ projects }) => {
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
 
-    // Agent name validation
+    // Agent name validation with specific space detection
     if (!formData.agentName.trim()) {
       errors.agentName = 'Agent name is required';
+    } else if (formData.agentName.includes(' ')) {
+      // Show modal for space character issue
+      setErrorModalContent({
+        title: 'Invalid Agent Name',
+        message: `Agent name "${formData.agentName}" contains spaces, which are not allowed.`,
+        details: [
+          'Agent names can only contain:',
+          '• Letters (a-z, A-Z)',
+          '• Numbers (0-9)', 
+          '• Hyphens (-)',
+          '• Underscores (_)'
+        ],
+        troubleshooting: [
+          `Try "UX_Reviewer" instead of "UX Reviewer"`,
+          `Or use "ux-reviewer" with hyphens`,
+          `Or use "UXReviewer" without spaces`
+        ]
+      });
+      setShowErrorModal(true);
+      errors.agentName = 'Agent name contains invalid characters (spaces)';
+      return false; // Immediately stop validation
     } else if (!/^[a-zA-Z0-9_-]+$/.test(formData.agentName)) {
       errors.agentName = 'Agent name can only contain letters, numbers, hyphens, and underscores';
     } else if (formData.agentName.length < 2) {
@@ -218,10 +247,47 @@ const AgentCreator: React.FC<AgentCreatorProps> = ({ projects }) => {
         });
       }
     } catch (error) {
-      setSubmitStatus({
-        type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to create agent'
-      });
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create agent';
+      
+      // Check if this is an OpenRouter error with detailed information
+      if (errorMessage.includes('OpenRouter AI service unavailable:')) {
+        try {
+          const jsonStart = errorMessage.indexOf('{');
+          if (jsonStart > -1) {
+            const errorDetails = JSON.parse(errorMessage.substring(jsonStart));
+            setErrorModalContent({
+              title: 'AI Service Unavailable',
+              message: `${errorDetails.service} is currently unavailable: ${errorDetails.issue}`,
+              details: errorDetails.possibleCauses || [],
+              troubleshooting: errorDetails.troubleshooting || []
+            });
+            setShowErrorModal(true);
+          } else {
+            throw new Error('No JSON details found');
+          }
+        } catch (parseError) {
+          // Fallback if JSON parsing fails
+          setErrorModalContent({
+            title: 'AI Service Error',
+            message: 'OpenRouter AI service is currently unavailable.',
+            details: [
+              'Agent creation requires AI generation',
+              'The service may be temporarily down'
+            ],
+            troubleshooting: [
+              'Check your internet connection',
+              'Try again in a few minutes',
+              'Verify OpenRouter service status'
+            ]
+          });
+          setShowErrorModal(true);
+        }
+      } else {
+        setSubmitStatus({
+          type: 'error',
+          message: errorMessage
+        });
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -884,6 +950,92 @@ Focus on specialization over generalization - agents that do one thing excellent
         </div>
       </form>
 
+      {/* Error Modal */}
+      {showErrorModal && (
+        <div style={{
+          position: 'fixed',
+          top: '0',
+          left: '0',
+          right: '0',
+          bottom: '0',
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1001,
+          padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: '#2d2d2d',
+            borderRadius: '8px',
+            padding: '24px',
+            maxWidth: '600px',
+            maxHeight: '80vh',
+            overflowY: 'auto',
+            border: '2px solid #f44336'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 style={{ color: '#f44336', margin: '0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertTriangle size={16} /> {errorModalContent.title}
+              </h2>
+              <button
+                onClick={() => setShowErrorModal(false)}
+                style={{
+                  backgroundColor: '#666',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '4px',
+                  padding: '8px 12px',
+                  cursor: 'pointer'
+                }}
+              >
+                Close
+              </button>
+            </div>
+            
+            <div style={{ color: '#fff', lineHeight: '1.6' }}>
+              <p style={{ marginBottom: '16px', fontSize: '16px' }}>
+                {errorModalContent.message}
+              </p>
+              
+              {errorModalContent.details && errorModalContent.details.length > 0 && (
+                <>
+                  <h3 style={{ color: '#f44336', margin: '20px 0 12px 0' }}>Details:</h3>
+                  <ul style={{ marginLeft: '20px', marginBottom: '16px' }}>
+                    {errorModalContent.details.map((detail, index) => (
+                      <li key={index} style={{ marginBottom: '4px' }}>{detail}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              
+              {errorModalContent.troubleshooting && errorModalContent.troubleshooting.length > 0 && (
+                <>
+                  <h3 style={{ color: '#4CAF50', margin: '20px 0 12px 0' }}>How to Fix:</h3>
+                  <ul style={{ marginLeft: '20px', marginBottom: '16px' }}>
+                    {errorModalContent.troubleshooting.map((step, index) => (
+                      <li key={index} style={{ marginBottom: '4px' }}>{step}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              
+              <div style={{ 
+                backgroundColor: '#1e1e1e', 
+                padding: '12px', 
+                borderRadius: '4px', 
+                marginTop: '20px',
+                border: '1px solid #f44336'
+              }}>
+                <p style={{ margin: '0', fontWeight: 'bold', color: '#f44336' }}>
+                  Fix the issue above and try creating the agent again.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Help Modal */}
       {showHelpModal && (
         <div style={{
@@ -928,7 +1080,7 @@ Focus on specialization over generalization - agents that do one thing excellent
             <div style={{ color: '#ccc', lineHeight: '1.6' }}>
               <p style={{ marginBottom: '16px' }}>Based on research from Anthropic and community best practices, here's what you need to capture:</p>
               
-              <h3 style={{ color: '#4CAF50', margin: '20px 0 12px 0' }}>🎯 Core Identity & Boundaries</h3>
+              <h3 style={{ color: '#4CAF50', margin: '20px 0 12px 0' }}><Target size={16} style={{ marginRight: '8px' }} />Core Identity & Boundaries</h3>
               <ul style={{ marginLeft: '20px', marginBottom: '16px' }}>
                 <li><strong>Specific role</strong> - "Python debugging specialist" not "helpful assistant"</li>
                 <li><strong>Clear capabilities</strong> - what it CAN do with examples</li>
@@ -936,7 +1088,7 @@ Focus on specialization over generalization - agents that do one thing excellent
                 <li><strong>Success criteria</strong> - how to measure if it's working well</li>
               </ul>
               
-              <h3 style={{ color: '#4CAF50', margin: '20px 0 12px 0' }}>🛠️ Tool Usage Protocol</h3>
+              <h3 style={{ color: '#4CAF50', margin: '20px 0 12px 0' }}><Wrench size={16} style={{ marginRight: '8px' }} />Tool Usage Protocol</h3>
               <p style={{ marginBottom: '8px' }}>For each tool the agent can use:</p>
               <ul style={{ marginLeft: '20px', marginBottom: '16px' }}>
                 <li><strong>When</strong> to use it (specific triggers)</li>
@@ -953,7 +1105,7 @@ Focus on specialization over generalization - agents that do one thing excellent
                 <li><strong>Size limits</strong> (prevent context explosion)</li>
               </ul>
               
-              <h3 style={{ color: '#4CAF50', margin: '20px 0 12px 0' }}>⚠️ Error Handling & Safety</h3>
+              <h3 style={{ color: '#4CAF50', margin: '20px 0 12px 0' }}><AlertTriangle size={16} style={{ marginRight: '8px' }} />Error Handling & Safety</h3>
               <ul style={{ marginLeft: '20px', marginBottom: '16px' }}>
                 <li><strong>Primary approach</strong> for normal operations</li>
                 <li><strong>Fallback strategies</strong> when things go wrong</li>
@@ -971,7 +1123,7 @@ Focus on specialization over generalization - agents that do one thing excellent
                 <p style={{ margin: '0', color: '#4CAF50' }}>✅ <strong>Clear limits</strong> - "cannot execute code, only analyze"</p>
               </div>
               
-              <h3 style={{ color: '#4CAF50', margin: '20px 0 12px 0' }}>💡 Pro Tips</h3>
+              <h3 style={{ color: '#4CAF50', margin: '20px 0 12px 0' }}><Lightbulb size={16} style={{ marginRight: '8px' }} />Pro Tips</h3>
               <ul style={{ marginLeft: '20px', marginBottom: '16px' }}>
                 <li><strong>Start specific</strong> - narrow focus beats broad capabilities</li>
                 <li><strong>Plan for failure</strong> - what happens when tools don't work?</li>
@@ -980,7 +1132,7 @@ Focus on specialization over generalization - agents that do one thing excellent
                 <li><strong>Human oversight</strong> - when should humans review decisions?</li>
               </ul>
               
-              <h3 style={{ color: '#4CAF50', margin: '20px 0 12px 0' }}>📚 Example of Good Agent Definition</h3>
+              <h3 style={{ color: '#4CAF50', margin: '20px 0 12px 0' }}><BookOpen size={16} style={{ marginRight: '8px' }} />Example of Good Agent Definition</h3>
               <div style={{ backgroundColor: '#1e1e1e', padding: '12px', borderRadius: '4px', fontFamily: 'monospace', fontSize: '13px' }}>
                 <p style={{ margin: '0 0 8px 0', color: '#4CAF50' }}>Role:</p>
                 <p style={{ margin: '0 0 12px 0' }}>Python security code reviewer specializing in web application vulnerabilities</p>

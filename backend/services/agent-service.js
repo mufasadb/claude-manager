@@ -7,7 +7,7 @@ const OpenRouterService = require('./openrouter-service');
 class AgentService {
     constructor(claudeManagerInstance = null) {
         this.validNamePattern = /^[a-zA-Z0-9_-]+$/;
-        this.openRouterService = new OpenRouterService();
+        this.openRouterService = new OpenRouterService(claudeManagerInstance);
         this.claudeManagerInstance = claudeManagerInstance;
         this.asciiPresets = [
             { face: '( ͡° ͜ʖ ͡°)', name: 'Mischievous', description: 'Playful problem solver' },
@@ -141,15 +141,32 @@ class AgentService {
             );
 
             if (!generationResult.success) {
-                throw new Error(generationResult.error || 'Failed to generate agent content');
+                // Provide detailed error information for the frontend
+                const errorDetails = {
+                    service: 'OpenRouter AI',
+                    issue: generationResult.error || 'Unknown error occurred',
+                    possibleCauses: [
+                        'OpenRouter API key not configured',
+                        'Network connectivity issues',
+                        'OpenRouter service temporarily unavailable',
+                        'Rate limit exceeded'
+                    ],
+                    troubleshooting: [
+                        'Check if OPENROUTER_API_KEY is set in environment variables',
+                        'Verify network connection',
+                        'Try again in a few minutes',
+                        'Check OpenRouter status at https://openrouter.ai/status'
+                    ]
+                };
+                throw new Error(`OpenRouter AI service unavailable: ${JSON.stringify(errorDetails)}`);
             }
 
             // Create the agent content with the generated system message
             const agentContent = this.formatAgentFile(
                 agentName,
                 description,
-                textFace || generationResult.suggestedTextFace,
-                textColor || generationResult.suggestedColor,
+                textFace,
+                textColor,
                 tools,
                 generationResult.systemMessage,
                 generationResult

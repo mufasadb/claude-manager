@@ -20,11 +20,13 @@ class FileWatcher {
 
     // Watch user config files
     const userPaths = getUserConfigPaths();
+    const registryPath = path.join(os.homedir(), '.claude-manager', 'registry.json');
     const watchPaths = [
       userPaths.settings,
       userPaths.settingsLocal, 
       userPaths.memory,
-      path.join(userPaths.commands, '**/*.md') // Watch all markdown files in commands directory recursively
+      path.join(userPaths.commands, '**/*.md'), // Watch all markdown files in commands directory recursively
+      registryPath // Watch the project registry file
     ];
     const userWatcher = chokidar.watch(watchPaths, {
       ignored: /node_modules/,

@@ -2,14 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { ApiService } from '../../services/ApiService';
 import { SessionCountdown, SessionStats } from '../../types';
 import './Header.css';
+import { Folder, Monitor, FolderOpen, BarChart3 } from 'lucide-react';
 
 type ConnectionStatus = 'connected' | 'disconnected' | 'checking';
 
 interface HeaderProps {
   onOpenSessionSidebar: () => void;
+  selectedProject?: string;
+  projectPath?: string;
+  selectedScope: 'user' | 'project';
 }
 
-const Header: React.FC<HeaderProps> = ({ onOpenSessionSidebar }) => {
+const Header: React.FC<HeaderProps> = ({ onOpenSessionSidebar, selectedProject, projectPath, selectedScope }) => {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('checking');
   const [sessionCountdown, setSessionCountdown] = useState<SessionCountdown | null>(null);
   const [sessionStats, setSessionStats] = useState<SessionStats | null>(null);
@@ -105,6 +109,38 @@ const Header: React.FC<HeaderProps> = ({ onOpenSessionSidebar }) => {
     }
   };
 
+  const handleOpenVSCode = async () => {
+    if (projectPath) {
+      try {
+        await ApiService.openInVSCode(projectPath);
+      } catch (error) {
+        console.error('Failed to open project in VS Code:', error);
+      }
+    }
+  };
+
+  const handleOpenFinder = async () => {
+    if (projectPath) {
+      try {
+        await ApiService.openInFinder(projectPath);
+      } catch (error) {
+        console.error('Failed to open project in Finder:', error);
+      }
+    }
+  };
+
+  const getProjectName = () => {
+    if (!selectedProject || !projectPath) return null;
+    return projectPath.split('/').pop() || selectedProject;
+  };
+
+  const getHeaderTitle = () => {
+    if (selectedScope === 'user' || !selectedProject) {
+      return 'Claude Manager Dashboard';
+    }
+    return getProjectName();
+  };
+
 
   return (
     <div className="header">
@@ -118,7 +154,37 @@ const Header: React.FC<HeaderProps> = ({ onOpenSessionSidebar }) => {
         </div>
       </div>
       
-      <h1>Claude Manager Dashboard</h1>
+      <div className="header-center">
+        {selectedScope === 'project' && selectedProject && projectPath ? (
+          <div className="project-header-section">
+            <div className="project-info-display">
+              <span className="project-icon"><Folder size={16} /></span>
+              <div className="project-info">
+                <h1 className="project-name">{getProjectName()}</h1>
+                <span className="project-path">{projectPath}</span>
+              </div>
+            </div>
+            <div className="project-actions">
+              <button 
+                className="project-action-btn vscode-btn"
+                onClick={handleOpenVSCode}
+                title={`Open ${getProjectName()} in VS Code`}
+              >
+                <Monitor size={16} />
+              </button>
+              <button 
+                className="project-action-btn finder-btn"
+                onClick={handleOpenFinder}
+                title={`Open ${getProjectName()} in Finder`}
+              >
+                <FolderOpen size={16} />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <h1 className="dashboard-title">Claude Manager Dashboard</h1>
+        )}
+      </div>
       
       <div className="header-right">
         <div className="session-countdown">
@@ -132,7 +198,7 @@ const Header: React.FC<HeaderProps> = ({ onOpenSessionSidebar }) => {
             onClick={onOpenSessionSidebar}
             title="View session statistics"
           >
-            📊
+            <BarChart3 size={16} />
           </button>
         </div>
       </div>

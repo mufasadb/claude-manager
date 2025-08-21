@@ -1,6 +1,7 @@
 const EventEmitter = require('events');
 const HookExecutor = require('./operations/hook-executor');
 const FileBasedHookLoader = require('./file-based-hook-loader');
+const HookLogManager = require('./data/hook-log-manager');
 
 class HookEventService extends EventEmitter {
   constructor(hookRegistry, projectService, userEnvVars = {}) {
@@ -10,6 +11,12 @@ class HookEventService extends EventEmitter {
     this.hookRegistry = hookRegistry;
     this.projectService = projectService;
     this.hookExecutor = new HookExecutor(userEnvVars);
+    
+    // Initialize hook log manager
+    this.hookLogManager = new HookLogManager();
+    this.hookLogManager.init().catch(error => {
+      console.error('Failed to initialize hook log manager in event service:', error);
+    });
     
     // Initialize new file-based hook loader
     this.fileBasedHooks = new FileBasedHookLoader();
@@ -61,24 +68,67 @@ class HookEventService extends EventEmitter {
       // Validate event data
       const validatedEvent = this.validateEventData(eventData);
       
-      // Add to processing queue
-      this.eventQueue.push({
-        ...validatedEvent,
-        receivedAt: Date.now(),
-        id: this.generateEventId()
-      });
-      
-      this.stats.eventsReceived++;
-      this.stats.lastEventTime = Date.now();
-      
-      // Emit event for real-time listeners
-      this.emit('eventReceived', validatedEvent);
-      
-      return {
-        success: true,
-        eventId: validatedEvent.id,
-        queuePosition: this.eventQueue.length
-      };
+      // For PreToolUse events, process synchronously to potentially block
+      if (validatedEvent.eventType === 'PreToolUse') {
+        const event = {
+          ...validatedEvent,
+          receivedAt: Date.now(),
+          id: this.generateEventId()
+        };
+        
+        try {
+          // Process hooks synchronously for blocking capability
+          const result = await this.processEvent(event);
+          
+          this.stats.eventsReceived++;
+          this.stats.lastEventTime = Date.now();
+          
+          // Emit event for real-time listeners
+          this.emit('eventReceived', event);
+          
+          // Return result that can block tool execution
+          return {
+            success: true,
+            eventId: event.id,
+            continue: result.continue !== false, // Default to true unless explicitly blocked
+            stopReason: result.stopReason || null,
+            hookResults: result.hookResults || []
+          };
+          
+        } catch (hookError) {
+          console.error('Error processing PreToolUse hooks:', hookError);
+          // On hook processing error, allow execution to continue
+          return {
+            success: true,
+            eventId: event.id,
+            continue: true,
+            error: hookError.message
+          };
+        }
+      } else {
+        // For other event types, use async processing as before
+        const event = {
+          ...validatedEvent,
+          receivedAt: Date.now(),
+          id: this.generateEventId()
+        };
+        
+        // Add to processing queue
+        this.eventQueue.push(event);
+        
+        this.stats.eventsReceived++;
+        this.stats.lastEventTime = Date.now();
+        
+        // Emit event for real-time listeners
+        this.emit('eventReceived', event);
+        
+        return {
+          success: true,
+          eventId: event.id,
+          continue: true, // Always continue for non-PreToolUse events
+          queuePosition: this.eventQueue.length
+        };
+      }
       
     } catch (error) {
       console.error('Error receiving hook event:', error);
@@ -86,7 +136,8 @@ class HookEventService extends EventEmitter {
       
       return {
         success: false,
-        error: error.message
+        error: error.message,
+        continue: true // Allow execution on validation errors
       };
     }
   }
@@ -128,7 +179,11 @@ class HookEventService extends EventEmitter {
           hooksExecuted: 0,
           processingTime: Date.now() - startTime
         });
-        return;
+        return {
+          continue: true,
+          hookResults: [],
+          hooksExecuted: 0
+        };
       }
 
       // Get project information if needed
@@ -136,14 +191,32 @@ class HookEventService extends EventEmitter {
 
       // Execute matching hooks
       const results = [];
+      let shouldBlock = false;
+      let blockReason = null;
+      
       for (const hook of matchingHooks) {
         try {
           const result = await this.hookExecutor.executeHook(hook, event, projectInfo);
           results.push(result);
           this.stats.hooksExecuted++;
           
+          // Check if this hook wants to block execution
+          if (result.result && result.result.continue === false) {
+            shouldBlock = true;
+            blockReason = result.result.stopReason || 'Hook blocked execution';
+          }
+          
           // Emit individual hook results
           this.emit('hookExecuted', { hook, event, result });
+          
+          // Emit hook log event for real-time updates
+          this.emit('hookLogUpdated', {
+            type: 'execution_result',
+            hookId: hook.id,
+            hookName: hook.name,
+            result,
+            timestamp: Date.now()
+          });
           
         } catch (error) {
           const errorResult = {
@@ -157,6 +230,15 @@ class HookEventService extends EventEmitter {
           results.push(errorResult);
           this.stats.errors++;
           this.emit('hookError', { hook, event, error: error.message });
+          
+          // Emit hook log event for errors
+          this.emit('hookLogUpdated', {
+            type: 'execution_error',
+            hookId: hook.id,
+            hookName: hook.name,
+            error: error.message,
+            timestamp: Date.now()
+          });
         }
       }
 
@@ -168,9 +250,24 @@ class HookEventService extends EventEmitter {
         processingTime: Date.now() - startTime
       });
 
+      // Return blocking response if any hook requested it
+      return {
+        continue: !shouldBlock,
+        stopReason: blockReason,
+        hookResults: results,
+        hooksExecuted: results.length
+      };
+
     } catch (error) {
       console.error('Error in event processing:', error);
       this.emit('eventError', { event, error: error.message });
+      
+      // On error, allow execution to continue
+      return {
+        continue: true,
+        hookResults: [],
+        error: error.message
+      };
     }
   }
 
@@ -187,10 +284,19 @@ class HookEventService extends EventEmitter {
       }
     }
 
-    // Validate event type
-    const validEventTypes = ['PreToolUse', 'PostToolUse', 'Notification', 'Stop', 'SubagentStop', 'UserPromptSubmit'];
+    // Validate event type (temporarily allow "Unknown" for debugging)
+    const validEventTypes = ['PreToolUse', 'PostToolUse', 'Notification', 'Stop', 'SubagentStop', 'UserPromptSubmit', 'Unknown'];
     if (!validEventTypes.includes(eventData.eventType)) {
       throw new Error(`Invalid event type: ${eventData.eventType}`);
+    }
+
+    // DEBUG: Log Unknown event types to understand the issue
+    if (eventData.eventType === 'Unknown') {
+      console.log('🔍 DEBUG: Unknown event received:', JSON.stringify({
+        originalData: eventData.originalHookData,
+        toolName: eventData.toolName,
+        eventType: eventData.eventType
+      }, null, 2));
     }
 
     // Extract command details from original hook data for enhanced hook processing
@@ -422,6 +528,49 @@ class HookEventService extends EventEmitter {
     }
     
     return baseStats;
+  }
+
+  // Hook log access methods
+  async getRecentHookLogs(limit = 50) {
+    try {
+      return this.hookLogManager.getRecentLogs(limit);
+    } catch (error) {
+      console.error('Error getting recent hook logs:', error);
+      return [];
+    }
+  }
+
+  async getHookLogsByHookId(hookId, limit = 100) {
+    try {
+      return this.hookLogManager.getLogsByHookId(hookId, limit);
+    } catch (error) {
+      console.error('Error getting hook logs by ID:', error);
+      return [];
+    }
+  }
+
+  async getHookLogStats() {
+    try {
+      return this.hookLogManager.getLogStats();
+    } catch (error) {
+      console.error('Error getting hook log stats:', error);
+      return {
+        totalLogs: 0,
+        levelCounts: {},
+        typeCounts: {},
+        hookCounts: {},
+        recentActivity: {}
+      };
+    }
+  }
+
+  async searchHookLogs(searchTerm, limit = 100) {
+    try {
+      return this.hookLogManager.searchLogs(searchTerm, limit);
+    } catch (error) {
+      console.error('Error searching hook logs:', error);
+      return [];
+    }
   }
 
   // Clear event queue

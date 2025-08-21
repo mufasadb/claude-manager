@@ -16,6 +16,7 @@ const HookRegistry = require('./services/data/hook-registry');
 const HookEventService = require('./services/hook-event-service');
 const HookGenerator = require('./services/operations/hook-generator');
 const MCPDiscoveryService = require('./services/mcp-discovery-service');
+const DocsService = require('./services/docs-service');
 
 // Import configuration
 const { COMMON_HOOKS } = require('./config/hooks');
@@ -40,13 +41,14 @@ class ClaudeManager {
     this.projectService = new ProjectService();
     this.fileWatcher = new FileWatcher();
     this.claudeConfigReader = new ClaudeConfigReader();
-    this.mcpService = new MCPService(this.claudeConfigReader);
-    this.commandService = new CommandService();
+    this.mcpService = new MCPService(this.claudeConfigReader, this.projectService);
+    this.commandService = new CommandService(this);
     this.agentService = new AgentService(this);
     this.hookRegistry = new HookRegistry();
     this.hookEventService = null; // Will be initialized after user env vars are loaded
     this.hookGenerator = null; // Will be initialized with Task agent reference
-    this.mcpDiscoveryService = new MCPDiscoveryService();
+    this.mcpDiscoveryService = new MCPDiscoveryService(this);
+    this.docsService = new DocsService();
 
     // User-level state
     this.state = {
@@ -85,7 +87,7 @@ class ClaudeManager {
     // Set up periodic MCP sync
     this.setupPeriodicMCPSync();
     
-    console.log('🚀 Claude Manager started on http://localhost:3455');
+    console.log('✓ Claude Manager started on http://localhost:3455');
   }
 
   async refreshAllData() {
@@ -217,6 +219,14 @@ class ClaudeManager {
         }
       });
     });
+
+    // Listen for hook log updates
+    this.hookEventService.on('hookLogUpdated', (logEvent) => {
+      this.broadcastToClients({
+        type: 'hookLogUpdated',
+        logEvent
+      });
+    });
   }
 
   // File Watching
@@ -275,6 +285,25 @@ class ClaudeManager {
 
   async onFileChange(scope, filePath, projectName) {
     console.log(`File changed: ${filePath} (${scope}${projectName ? ` - ${projectName}` : ''})`);
+    
+    // Handle registry.json changes
+    if (filePath.includes('registry.json')) {
+      console.log('Registry file changed, refreshing projects...');
+      await this.projectService.reload();
+      this.state.projects = this.projectService.getProjects();
+      this.state.projectEnvVars = this.projectService.getAllProjectEnvVars();
+      
+      // Update file watchers for the new project list
+      this.setupFileWatchers();
+      
+      // Broadcast project update to clients
+      this.broadcastToClients({ 
+        type: 'projectUpdate', 
+        projects: this.state.projects,
+        projectEnvVars: this.state.projectEnvVars
+      });
+      return;
+    }
     
     if (scope === 'user') {
       await this.refreshUserConfig();
@@ -650,8 +679,8 @@ class ClaudeManager {
     // Project management endpoints
     this.app.post('/api/register-project', async (req, res) => {
       try {
-        const { name, path: projectPath } = req.body;
-        const result = await this.projectService.registerProject(name, projectPath);
+        const { name, path: projectPath, statusDisplay } = req.body;
+        const result = await this.projectService.registerProject(name, projectPath, statusDisplay);
         
         // Register with both hook systems
         await this.hookRegistry.loadProjectHooks(name, projectPath);
@@ -682,6 +711,83 @@ class ClaudeManager {
         res.json(result);
       } catch (error) {
         res.status(400).json({ error: error.message });
+      }
+    });
+
+    // Status display management endpoints
+    this.app.get('/api/project-status-display', async (req, res) => {
+      try {
+        const { path: projectPath } = req.query;
+        
+        if (!projectPath) {
+          return res.status(400).json({ error: 'Project path is required' });
+        }
+
+        const statusDisplay = this.projectService.getStatusDisplayByPath(projectPath);
+        res.json({ statusDisplay: statusDisplay || 'http://localhost:3456' }); // Default fallback
+      } catch (error) {
+        res.status(400).json({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/update-status-display', async (req, res) => {
+      try {
+        const { projectName, statusDisplay } = req.body;
+        
+        if (!projectName) {
+          return res.status(400).json({ error: 'Project name is required' });
+        }
+
+        const result = await this.projectService.updateStatusDisplay(projectName, statusDisplay);
+        this.broadcastToClients();
+        res.json({ success: true, project: result });
+      } catch (error) {
+        res.status(400).json({ error: error.message });
+      }
+    });
+
+    // Quick actions for projects
+    this.app.post('/api/open-vscode', async (req, res) => {
+      try {
+        const { projectPath } = req.body;
+        
+        if (!projectPath) {
+          return res.status(400).json({ error: 'Project path is required' });
+        }
+
+        const { exec } = require('child_process');
+        exec(`code "${projectPath}"`, (error, stdout, stderr) => {
+          if (error) {
+            console.error('Error opening VS Code:', error);
+            return res.status(500).json({ error: 'Failed to open VS Code' });
+          }
+          res.json({ success: true });
+        });
+      } catch (error) {
+        console.error('Error opening VS Code:', error);
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/open-finder', async (req, res) => {
+      try {
+        const { projectPath } = req.body;
+        
+        if (!projectPath) {
+          return res.status(400).json({ error: 'Project path is required' });
+        }
+
+        const { exec } = require('child_process');
+        exec(`open "${projectPath}"`, (error, stdout, stderr) => {
+          if (error) {
+            console.error('Error opening Finder:', error);
+            return res.status(500).json({ error: 'Failed to open Finder' });
+          }
+          res.json({ success: true });
+        });
+      } catch (error) {
+        console.error('Error opening Finder:', error);
+        res.status(500).json({ error: error.message });
       }
     });
 
@@ -1307,18 +1413,87 @@ class ClaudeManager {
           });
         }
 
-        // Add the discovered template to the MCP service templates
-        const templateKey = template.templateKey;
-        this.mcpService.templates[templateKey] = template.template;
+        // Validate scope for project installations
+        if (scope === 'project' && !projectPath) {
+          return res.status(400).json({ 
+            success: false, 
+            error: 'Project path is required for project scope installations' 
+          });
+        }
 
-        // Return success confirmation without mounting the MCP
-        res.json({
-          success: true,
-          templateAdded: templateKey,
-          templateName: template.template.name,
-          message: `Template "${template.template.name}" has been created successfully! You can now select it from the MCP templates dropdown in the regular Add MCP screen.`,
-          navigateTo: 'mcp-add-screen'
-        });
+        const mcpTemplate = template.template;
+        
+        // Prepare the MCP configuration from the discovered template
+        const mcpConfig = {
+          name: template.templateKey || mcpTemplate.name.toLowerCase().replace(/\s+/g, '-'),
+          command: mcpTemplate.command,
+          transport: mcpTemplate.transport || 'stdio',
+          args: mcpTemplate.args || [],
+          envVars: mcpTemplate.providedEnvVars || {},
+          projectPath: scope === 'project' ? projectPath : undefined
+        };
+
+        // Check if environment variables are required but not provided
+        const requiresEnvVars = mcpTemplate.envVars && mcpTemplate.envVars.length > 0;
+        let hasRequiredEnvVars = true;
+        
+        if (requiresEnvVars) {
+          for (const envVar of mcpTemplate.envVars) {
+            if (envVar.required && (!mcpConfig.envVars[envVar.key] || mcpConfig.envVars[envVar.key].trim() === '')) {
+              hasRequiredEnvVars = false;
+              break;
+            }
+          }
+        }
+
+        // If environment variables are required but not all are provided,
+        // add the template and return instructions for manual configuration
+        if (requiresEnvVars && !hasRequiredEnvVars) {
+          // Add the template to MCP service for later use
+          const templateKey = template.templateKey || mcpTemplate.name.toLowerCase().replace(/\s+/g, '-');
+          this.mcpService.templates[templateKey] = mcpTemplate;
+
+          return res.json({
+            success: true,
+            requiresEnvVars: true,
+            templateAdded: templateKey,
+            templateName: mcpTemplate.name,
+            template: mcpTemplate,
+            message: `Template "${mcpTemplate.name}" has been created but requires environment variables. Please configure the required variables and add the MCP manually.`,
+            envVars: mcpTemplate.envVars
+          });
+        }
+
+        // If no environment variables are required, directly install the MCP
+        try {
+          const result = await this.mcpService.addMCP(scope, mcpConfig, projectPath);
+          
+          // Update state and broadcast
+          this.state.mcps = this.mcpService.getState();
+          this.broadcastToClients({ type: 'mcpUpdate', mcps: this.state.mcps });
+          
+          res.json({
+            success: true,
+            mcpInstalled: true,
+            mcpName: mcpConfig.name,
+            templateName: mcpTemplate.name,
+            message: `MCP server "${mcpTemplate.name}" has been successfully installed and configured!`,
+            result
+          });
+        } catch (installError) {
+          // If installation fails, still add the template for manual retry
+          const templateKey = template.templateKey || mcpTemplate.name.toLowerCase().replace(/\s+/g, '-');
+          this.mcpService.templates[templateKey] = mcpTemplate;
+          
+          return res.json({
+            success: false,
+            error: `Failed to install MCP: ${installError.message}`,
+            templateAdded: templateKey,
+            templateName: mcpTemplate.name,
+            message: `Installation failed, but template "${mcpTemplate.name}" has been saved. You can try installing it manually from the MCP templates.`
+          });
+        }
+
       } catch (error) {
         console.error('Failed to add discovered MCP:', error);
         res.status(500).json({ 
@@ -1491,6 +1666,28 @@ class ClaudeManager {
         const { scope, projectName } = req.query;
         const commands = await this.commandService.listExistingCommands(scope, projectName);
         res.json({ commands });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/get-slash-command-content', async (req, res) => {
+      try {
+        const { scope, relativePath, projectName } = req.query;
+        const result = await this.commandService.getCommandContent(scope, relativePath, projectName);
+        
+        if (result.success) {
+          res.json({ 
+            success: true, 
+            content: result.content,
+            relativePath: result.relativePath 
+          });
+        } else {
+          res.status(400).json({ 
+            success: false, 
+            error: result.error 
+          });
+        }
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
@@ -1838,9 +2035,15 @@ class ClaudeManager {
     // Hook event webhook endpoint
     this.app.post('/api/hooks/webhook', async (req, res) => {
       try {
+        // Log WebFetch events for debugging
+        if (req.body.toolName === 'WebFetch') {
+          console.log('🔍 WebFetch hook event:', JSON.stringify(req.body, null, 2));
+        }
+        
         const result = await this.hookEventService.receiveHookEvent(req.body);
         res.json(result);
       } catch (error) {
+        console.log('❌ Hook webhook error:', error.message);
         res.status(500).json({ error: error.message });
       }
     });
@@ -1869,6 +2072,75 @@ class ClaudeManager {
         res.json({
           events: events,
           total: events.length,
+          limit: limit
+        });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // === HOOK LOGGING ENDPOINTS ===
+    
+    // Get recent hook logs
+    this.app.get('/api/hooks/logs', async (req, res) => {
+      try {
+        const limit = parseInt(req.query.limit) || 50;
+        const logs = await this.hookEventService.getRecentHookLogs(limit);
+        
+        res.json({
+          logs: logs,
+          total: logs.length,
+          limit: limit
+        });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Get hook log statistics (must come before parameterized route)
+    this.app.get('/api/hooks/logs/stats', async (req, res) => {
+      try {
+        const stats = await this.hookEventService.getHookLogStats();
+        res.json(stats);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Search hook logs (must come before parameterized route)
+    this.app.get('/api/hooks/logs/search', async (req, res) => {
+      try {
+        const { q: searchTerm } = req.query;
+        const limit = parseInt(req.query.limit) || 100;
+        
+        if (!searchTerm) {
+          return res.status(400).json({ error: 'Search term (q) is required' });
+        }
+        
+        const logs = await this.hookEventService.searchHookLogs(searchTerm, limit);
+        
+        res.json({
+          logs: logs,
+          searchTerm: searchTerm,
+          total: logs.length,
+          limit: limit
+        });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Get hook logs by hook ID
+    this.app.get('/api/hooks/logs/:hookId', async (req, res) => {
+      try {
+        const { hookId } = req.params;
+        const limit = parseInt(req.query.limit) || 100;
+        const logs = await this.hookEventService.getHookLogsByHookId(hookId, limit);
+        
+        res.json({
+          logs: logs,
+          hookId: hookId,
+          total: logs.length,
           limit: limit
         });
       } catch (error) {
@@ -2078,6 +2350,86 @@ class ClaudeManager {
       }
     });
 
+    // Anthropic Docs Interceptor Hook API
+    this.app.post('/api/hooks/anthropic-docs-interceptor', async (req, res) => {
+      try {
+        const { url, toolInput } = req.body;
+        
+        // Check if this is a call to Anthropic documentation
+        if (!url || !url.includes('docs.anthropic.com')) {
+          return res.json({ 
+            success: true, 
+            skipped: true, 
+            reason: 'Not an Anthropic docs URL',
+            allowProceed: true 
+          });
+        }
+        
+        // Check if local docs are available
+        const docsDir = path.join(os.homedir(), '.claude-manager-docs');
+        const docsAvailable = await fs.pathExists(docsDir);
+        
+        let message = `🚫 Intercepted WebFetch call to: ${url}\n\n`;
+        
+        if (docsAvailable) {
+          // Check if docs service is available
+          const docsPath = path.join(docsDir, 'docs');
+          const docsInstalled = await fs.pathExists(docsPath);
+          
+          if (docsInstalled) {
+            message += `✅ Local Claude Code documentation is available!\n\n`;
+            message += `Instead of fetching from the web, you can:\n`;
+            message += `1. Use: cm-docs search "your query" (searches local docs)\n`;
+            message += `2. Browse locally at: ${docsPath}\n`;
+            message += `3. Check specific files in: ${docsPath}/claude-code/\n\n`;
+            
+            // Try to suggest the specific local file based on the URL
+            const urlParts = url.split('/docs/claude-code/');
+            if (urlParts.length > 1) {
+              const docPath = urlParts[1].replace(/\/$/, '') || 'overview';
+              const localFile = path.join(docsPath, 'claude-code', `${docPath}.md`);
+              
+              if (await fs.pathExists(localFile)) {
+                message += `   The specific file you're looking for is likely at:\n`;
+                message += `   ${localFile}\n\n`;
+              }
+            }
+            
+            message += `📝 To sync local docs: cm-docs sync\n`;
+            message += `   To check docs status: cm-docs status\n\n`;
+          } else {
+            message += `   Local docs directory exists but incomplete.\n`;
+            message += `Run: cm-docs sync to fix this.\n\n`;
+          }
+        } else {
+          message += `❌ Local Claude Code documentation not installed.\n\n`;
+          message += `To install local docs (faster access):\n`;
+          message += `1. Run: ./install-docs.sh (from claude-manager directory)\n`;
+          message += `2. Then use: cm-docs search "your query"\n\n`;
+        }
+        
+        message += `⚡ Local docs are much faster than web fetching!\n`;
+        message += `🔄 This hook can be disabled in Hook Management if needed.`;
+
+        // Block the WebFetch call by returning blocked status
+        return res.json({
+          success: false,
+          blocked: true,
+          message: message,
+          timestamp: new Date().toISOString(),
+          allowProceed: false
+        });
+
+      } catch (error) {
+        console.error('Error in Anthropic docs interceptor hook:', error);
+        return res.status(500).json({
+          success: false,
+          error: error.message,
+          timestamp: new Date().toISOString()
+        });
+      }
+    });
+
     // Generate hook from template
     this.app.post('/api/hooks/generate-template', async (req, res) => {
       try {
@@ -2212,6 +2564,90 @@ try {
 
         // Fallback to AI generation if no static template
         const result = await this.hookGenerator.generateTemplateHook(template, customization);
+        res.json(result);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Documentation API endpoints
+    this.app.get('/api/docs/status', async (req, res) => {
+      try {
+        const status = await this.docsService.getStatus();
+        res.json(status);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/docs/install', async (req, res) => {
+      try {
+        const result = await this.docsService.install();
+        res.json(result);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/docs/sync', async (req, res) => {
+      try {
+        const result = await this.docsService.syncDocs();
+        res.json(result);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/docs/search', async (req, res) => {
+      try {
+        const { q: query } = req.query;
+        if (!query) {
+          return res.status(400).json({ error: 'Query parameter "q" is required' });
+        }
+        
+        const results = await this.docsService.searchDocs(query);
+        res.json(results);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/docs/changelog', async (req, res) => {
+      try {
+        const { limit = 10 } = req.query;
+        const changelog = await this.docsService.getChangelog(parseInt(limit));
+        res.json(changelog);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/docs/list', async (req, res) => {
+      try {
+        const files = await this.docsService.listDocs();
+        res.json(files);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/docs/content', async (req, res) => {
+      try {
+        const { path: filePath } = req.query;
+        if (!filePath) {
+          return res.status(400).json({ error: 'Query parameter "path" is required' });
+        }
+        
+        const content = await this.docsService.getDocContent(filePath);
+        res.json(content);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/docs/auto-sync', async (req, res) => {
+      try {
+        const result = await this.docsService.autoSync();
         res.json(result);
       } catch (error) {
         res.status(500).json({ error: error.message });

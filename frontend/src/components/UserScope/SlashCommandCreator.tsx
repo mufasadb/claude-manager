@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { ApiService } from '../../services/ApiService';
 import { SlashCommandFormData, SlashCommand } from '../../types';
+import { Clock, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 
 interface SlashCommandCreatorProps {
   projects: Record<string, any>;
@@ -28,6 +30,9 @@ const SlashCommandCreator: React.FC<SlashCommandCreatorProps> = ({ projects }) =
     command: SlashCommand | null;
     isOpen: boolean;
   }>({ command: null, isOpen: false });
+  const [expandedCommand, setExpandedCommand] = useState<string | null>(null);
+  const [commandContent, setCommandContent] = useState<Record<string, string>>({});
+  const [loadingContent, setLoadingContent] = useState<Record<string, boolean>>({});
 
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
@@ -199,6 +204,51 @@ const SlashCommandCreator: React.FC<SlashCommandCreatorProps> = ({ projects }) =
     setShowDeleteConfirm({ command: null, isOpen: false });
   };
 
+  const handleToggleContent = async (command: SlashCommand) => {
+    const commandKey = command.relativePath;
+    
+    if (expandedCommand === commandKey) {
+      // Collapse if already expanded
+      setExpandedCommand(null);
+      return;
+    }
+    
+    // Expand and load content if not already loaded
+    setExpandedCommand(commandKey);
+    
+    if (!commandContent[commandKey]) {
+      setLoadingContent(prev => ({ ...prev, [commandKey]: true }));
+      
+      try {
+        const result = await ApiService.getSlashCommandContent(
+          formData.scope,
+          command.relativePath,
+          formData.scope === 'project' ? formData.projectName : undefined
+        );
+        
+        if (result.success && result.content) {
+          setCommandContent(prev => ({ ...prev, [commandKey]: result.content || '' }));
+        } else {
+          setCommandContent(prev => ({ ...prev, [commandKey]: 'Error: Could not load command content' }));
+        }
+      } catch (error) {
+        setCommandContent(prev => ({ 
+          ...prev, 
+          [commandKey]: `Error: ${error instanceof Error ? error.message : 'Failed to load content'}` 
+        }));
+      } finally {
+        setLoadingContent(prev => ({ ...prev, [commandKey]: false }));
+      }
+    }
+  };
+
+  const processMarkdownContent = (rawContent: string) => {
+    // Remove YAML frontmatter if present
+    const yamlFrontmatterRegex = /^---\s*\n[\s\S]*?\n---\s*\n/;
+    const contentWithoutFrontmatter = rawContent.replace(yamlFrontmatterRegex, '');
+    return contentWithoutFrontmatter.trim();
+  };
+
   const projectOptions = Object.keys(projects);
 
   return (
@@ -236,47 +286,123 @@ const SlashCommandCreator: React.FC<SlashCommandCreatorProps> = ({ projects }) =
           {existingCommands.length === 0 ? (
             <p style={{ color: '#888', margin: '0' }}>No commands found</p>
           ) : (
-            <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-              {existingCommands.map((cmd, index) => (
-                <div key={index} style={{ 
-                  marginBottom: '8px', 
-                  padding: '8px', 
-                  backgroundColor: '#333', 
-                  borderRadius: '4px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start'
-                }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ color: '#4CAF50', fontWeight: 'bold' }}>
-                      /{cmd.category ? `${cmd.category}:${cmd.name}` : cmd.name}
-                    </div>
-                    <div style={{ color: '#ccc', fontSize: '14px', marginTop: '4px' }}>
-                      {cmd.description}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleDeleteClick(cmd)}
-                    disabled={deletingCommand === cmd.relativePath}
-                    style={{
-                      backgroundColor: 'transparent',
-                      border: 'none',
-                      color: deletingCommand === cmd.relativePath ? '#666' : '#f44336',
-                      cursor: deletingCommand === cmd.relativePath ? 'not-allowed' : 'pointer',
-                      padding: '4px',
-                      borderRadius: '4px',
+            <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
+              {existingCommands.map((cmd, index) => {
+                const isExpanded = expandedCommand === cmd.relativePath;
+                const isLoadingContent = loadingContent[cmd.relativePath];
+                const content = commandContent[cmd.relativePath];
+                
+                return (
+                  <div key={index} style={{ 
+                    marginBottom: '8px', 
+                    backgroundColor: '#333', 
+                    borderRadius: '4px'
+                  }}>
+                    {/* Command header */}
+                    <div style={{
+                      padding: '8px',
                       display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      marginLeft: '8px',
-                      fontSize: '16px'
-                    }}
-                    title={deletingCommand === cmd.relativePath ? 'Deleting...' : 'Delete command'}
-                  >
-                    {deletingCommand === cmd.relativePath ? '⏳' : '🗑️'}
-                  </button>
-                </div>
-              ))}
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start'
+                    }}>
+                      <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => handleToggleContent(cmd)}>
+                        <div style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '8px',
+                          marginBottom: '4px'
+                        }}>
+                          {isExpanded ? <ChevronDown size={16} color="#888" /> : <ChevronRight size={16} color="#888" />}
+                          <div style={{ color: '#4CAF50', fontWeight: 'bold' }}>
+                            /{cmd.category ? `${cmd.category}:${cmd.name}` : cmd.name}
+                          </div>
+                        </div>
+                        <div style={{ color: '#ccc', fontSize: '14px', marginLeft: '24px' }}>
+                          {cmd.description}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteClick(cmd)}
+                        disabled={deletingCommand === cmd.relativePath}
+                        style={{
+                          backgroundColor: 'transparent',
+                          border: 'none',
+                          color: deletingCommand === cmd.relativePath ? '#666' : '#f44336',
+                          cursor: deletingCommand === cmd.relativePath ? 'not-allowed' : 'pointer',
+                          padding: '4px',
+                          borderRadius: '4px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          marginLeft: '8px',
+                          fontSize: '16px'
+                        }}
+                        title={deletingCommand === cmd.relativePath ? 'Deleting...' : 'Delete command'}
+                      >
+                        {deletingCommand === cmd.relativePath ? <Clock size={14} /> : <Trash2 size={14} />}
+                      </button>
+                    </div>
+                    
+                    {/* Command content */}
+                    {isExpanded && (
+                      <div style={{
+                        borderTop: '1px solid #444',
+                        padding: '12px',
+                        backgroundColor: '#2a2a2a'
+                      }}>
+                        {isLoadingContent ? (
+                          <div style={{ color: '#888', textAlign: 'center', padding: '20px' }}>
+                            Loading command content...
+                          </div>
+                        ) : content ? (
+                          <div style={{
+                            overflow: 'auto',
+                            maxHeight: '400px',
+                            padding: '12px',
+                            backgroundColor: '#1e1e1e',
+                            borderRadius: '4px',
+                            border: '1px solid #444'
+                          }}>
+                            <ReactMarkdown
+                              components={{
+                                h1: ({children}) => <h1 style={{color: '#fff', fontSize: '24px', marginTop: '0', marginBottom: '16px', borderBottom: '2px solid #4CAF50', paddingBottom: '8px'}}>{children}</h1>,
+                                h2: ({children}) => <h2 style={{color: '#fff', fontSize: '20px', marginTop: '24px', marginBottom: '12px', borderBottom: '1px solid #666', paddingBottom: '6px'}}>{children}</h2>,
+                                h3: ({children}) => <h3 style={{color: '#fff', fontSize: '18px', marginTop: '20px', marginBottom: '10px'}}>{children}</h3>,
+                                h4: ({children}) => <h4 style={{color: '#fff', fontSize: '16px', marginTop: '16px', marginBottom: '8px'}}>{children}</h4>,
+                                h5: ({children}) => <h5 style={{color: '#fff', fontSize: '14px', marginTop: '14px', marginBottom: '6px'}}>{children}</h5>,
+                                h6: ({children}) => <h6 style={{color: '#fff', fontSize: '13px', marginTop: '12px', marginBottom: '4px'}}>{children}</h6>,
+                                p: ({children}) => <p style={{color: '#ddd', lineHeight: '1.6', marginBottom: '12px'}}>{children}</p>,
+                                code: ({children}) => <code style={{backgroundColor: '#333', color: '#f8f8f2', padding: '2px 4px', borderRadius: '3px', fontSize: '13px', fontFamily: 'Monaco, "Courier New", monospace'}}>{children}</code>,
+                                pre: ({children}) => <pre style={{backgroundColor: '#2a2a2a', color: '#f8f8f2', padding: '12px', borderRadius: '4px', overflow: 'auto', border: '1px solid #444', fontSize: '13px', lineHeight: '1.4', fontFamily: 'Monaco, "Courier New", monospace'}}>{children}</pre>,
+                                ul: ({children}) => <ul style={{color: '#ddd', marginLeft: '20px', marginBottom: '12px'}}>{children}</ul>,
+                                ol: ({children}) => <ol style={{color: '#ddd', marginLeft: '20px', marginBottom: '12px'}}>{children}</ol>,
+                                li: ({children}) => <li style={{marginBottom: '4px'}}>{children}</li>,
+                                blockquote: ({children}) => <blockquote style={{borderLeft: '4px solid #4CAF50', paddingLeft: '16px', margin: '16px 0', fontStyle: 'italic', color: '#ccc'}}>{children}</blockquote>,
+                                a: ({children, href}) => <a href={href} style={{color: '#4CAF50', textDecoration: 'underline'}} target="_blank" rel="noopener noreferrer">{children}</a>,
+                                strong: ({children}) => <strong style={{color: '#fff', fontWeight: 'bold'}}>{children}</strong>,
+                                em: ({children}) => <em style={{color: '#ccc', fontStyle: 'italic'}}>{children}</em>,
+                                hr: () => <hr style={{border: 'none', borderTop: '1px solid #666', margin: '20px 0'}} />,
+                                table: ({children}) => <table style={{borderCollapse: 'collapse', width: '100%', marginBottom: '16px', border: '1px solid #666'}}>{children}</table>,
+                                thead: ({children}) => <thead style={{backgroundColor: '#333'}}>{children}</thead>,
+                                tbody: ({children}) => <tbody>{children}</tbody>,
+                                tr: ({children}) => <tr style={{borderBottom: '1px solid #666'}}>{children}</tr>,
+                                th: ({children}) => <th style={{color: '#fff', padding: '8px', textAlign: 'left', borderRight: '1px solid #666'}}>{children}</th>,
+                                td: ({children}) => <td style={{color: '#ddd', padding: '8px', borderRight: '1px solid #666'}}>{children}</td>
+                              }}
+                            >
+                              {processMarkdownContent(content)}
+                            </ReactMarkdown>
+                          </div>
+                        ) : (
+                          <div style={{ color: '#888', fontStyle: 'italic' }}>
+                            Click to load content...
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

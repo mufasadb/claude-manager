@@ -3,6 +3,7 @@ const axios = require('axios');
 const OllamaService = require('../integrations/ollama-service');
 const TTSService = require('../integrations/tts-service');
 const { serviceConfig } = require('../../utils/service-config');
+const HookLogManager = require('../data/hook-log-manager');
 
 class HookExecutor {
   constructor(userEnvVars = {}) {
@@ -11,6 +12,12 @@ class HookExecutor {
     this.ollamaService = new OllamaService();
     this.ttsService = new TTSService();
     
+    // Initialize hook log manager
+    this.hookLogManager = new HookLogManager();
+    this.hookLogManager.init().catch(error => {
+      console.error('Failed to initialize hook log manager:', error);
+    });
+    
     // Execution timeout (30 seconds)
     this.executionTimeout = 30000;
   }
@@ -18,6 +25,18 @@ class HookExecutor {
   // Execute a hook with the provided event data
   async executeHook(hook, eventData, projectInfo = null) {
     const startTime = Date.now();
+    
+    // Log hook execution start
+    try {
+      await this.hookLogManager.logHookExecution(
+        hook.id, 
+        hook.name, 
+        eventData.eventType, 
+        eventData
+      );
+    } catch (logError) {
+      console.error('Failed to log hook execution start:', logError);
+    }
     
     try {
       // Create execution context
@@ -28,7 +47,7 @@ class HookExecutor {
       
       const executionTime = Date.now() - startTime;
       
-      return {
+      const successResult = {
         success: true,
         hookId: hook.id,
         hookName: hook.name,
@@ -36,10 +55,19 @@ class HookExecutor {
         executionTime,
         timestamp: Date.now()
       };
+      
+      // Log successful execution
+      try {
+        await this.hookLogManager.logHookResult(hook.id, hook.name, successResult);
+      } catch (logError) {
+        console.error('Failed to log hook success:', logError);
+      }
+      
+      return successResult;
     } catch (error) {
       const executionTime = Date.now() - startTime;
       
-      return {
+      const errorResult = {
         success: false,
         hookId: hook.id,
         hookName: hook.name,
@@ -48,6 +76,15 @@ class HookExecutor {
         executionTime,
         timestamp: Date.now()
       };
+      
+      // Log failed execution
+      try {
+        await this.hookLogManager.logHookResult(hook.id, hook.name, errorResult);
+      } catch (logError) {
+        console.error('Failed to log hook error:', logError);
+      }
+      
+      return errorResult;
     }
   }
 
@@ -60,7 +97,8 @@ class HookExecutor {
         toolName: eventData.toolName,
         filePaths: eventData.filePaths || [],
         context: eventData.context || {},
-        timestamp: eventData.timestamp || Date.now()
+        timestamp: eventData.timestamp || Date.now(),
+        originalHookData: eventData.originalHookData || {}
       },
       
       // Project information (if available)
@@ -210,7 +248,12 @@ class HookExecutor {
       
       console.log(`[Hook:${hook.id}:${level}] ${message}`);
       
-      // TODO: Store logs in hook execution history
+      // Store logs in hook execution history
+      this.hookLogManager.logHookMessage(hook.id, hook.name, level, message)
+        .catch(error => {
+          console.error('Failed to store hook log message:', error);
+        });
+      
       return message;
     };
   }

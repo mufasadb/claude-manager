@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ApiService } from '../../services/ApiService';
 import './UserConfiguration.css';
+import { Edit3, Save, X, ChevronUp, Lightbulb } from 'lucide-react';
 
 interface UserClaudeMdEditorProps {
   claudeMdContent: string;
@@ -77,7 +78,7 @@ const UserClaudeMdEditor: React.FC<UserClaudeMdEditorProps> = ({
             className="expand-btn"
             title="Edit CLAUDE.md"
           >
-            ✏️
+            <Edit3 size={14} />
           </button>
         )}
       </div>
@@ -97,21 +98,21 @@ const UserClaudeMdEditor: React.FC<UserClaudeMdEditorProps> = ({
                 className="save-btn"
                 title="Save changes"
               >
-                {isSaving ? '💾...' : '💾 Save'}
+                {isSaving ? <><Save size={14} />...</> : <><Save size={14} style={{ marginRight: '4px' }} />Save</>}
               </button>
               <button
                 onClick={handleCancel}
                 className="cancel-btn"
                 title="Cancel and close"
               >
-                ✗ Cancel
+                <X size={14} style={{ marginRight: '4px' }} />Cancel
               </button>
               <button
                 onClick={handleCollapse}
                 className="collapse-btn"
                 title="Collapse editor"
               >
-                ⬆️
+                <ChevronUp size={14} />
               </button>
             </div>
           </div>
@@ -146,7 +147,7 @@ Add your personal Claude configuration notes, best practices, and project guidel
           
           <div className="editor-footer">
             <div className="format-info">
-              💡 Tip: Use Markdown syntax for headers (#), lists (-), code blocks (```), and links ([text](url))
+              <Lightbulb size={16} style={{ marginRight: '6px' }} />Tip: Use Markdown syntax for headers (#), lists (-), code blocks (```), and links ([text](url))
             </div>
           </div>
         </div>

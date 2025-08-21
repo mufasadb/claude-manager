@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ApiService } from '../../services/ApiService';
 import { Project } from '../../types';
 import './EnvVariablesTable.css';
+import { Copy, Edit3, Send, Trash2, Check, X } from 'lucide-react';
 
 interface EnvVariablesTableProps {
   envVars: Record<string, string>;
@@ -33,6 +34,9 @@ const EnvVariablesTable: React.FC<EnvVariablesTableProps> = ({
   const [showPushModal, setShowPushModal] = useState<{ key: string; value: string } | null>(null);
   const [selectedProject, setSelectedProject] = useState<string>('');
   const [pushStatus, setPushStatus] = useState<string>('');
+  const [showAddForm, setShowAddForm] = useState<boolean>(false);
+  const [newKey, setNewKey] = useState<string>('');
+  const [newValue, setNewValue] = useState<string>('');
 
   const maskValue = (value: string): string => {
     if (value.length <= 6) {
@@ -122,14 +126,91 @@ const EnvVariablesTable: React.FC<EnvVariablesTableProps> = ({
     setPushStatus('');
   };
 
-  if (Object.keys(filteredEnvVars).length === 0) {
+  const handleAddVariable = async () => {
+    if (!newKey.trim() || !newValue.trim()) return;
+    
+    try {
+      await ApiService.updateUserEnv(newKey.trim(), newValue.trim());
+      setNewKey('');
+      setNewValue('');
+      setShowAddForm(false);
+      onRefresh();
+    } catch (error) {
+      console.error('Failed to add environment variable:', error);
+    }
+  };
+
+  const cancelAddVariable = () => {
+    setNewKey('');
+    setNewValue('');
+    setShowAddForm(false);
+  };
+
+  if (Object.keys(filteredEnvVars).length === 0 && !showAddForm) {
     return (
-      <div className="no-data">No user-level environment variables configured</div>
+      <div className="env-vars-table-container">
+        <div className="add-var-header">
+          <button
+            onClick={() => setShowAddForm(true)}
+            className="add-var-btn"
+            title="Add new environment variable"
+          >
+            + Add Environment Variable
+          </button>
+        </div>
+        <div className="no-data">No user-level environment variables configured</div>
+      </div>
     );
   }
 
   return (
     <div className="env-vars-table-container">
+      <div className="add-var-header">
+        <button
+          onClick={() => setShowAddForm(true)}
+          className="add-var-btn"
+          title="Add new environment variable"
+        >
+          + Add Environment Variable
+        </button>
+      </div>
+
+      {showAddForm && (
+        <div className="add-var-form">
+          <div className="form-row">
+            <input
+              type="text"
+              placeholder="Variable name (e.g., API_KEY)"
+              value={newKey}
+              onChange={(e) => setNewKey(e.target.value)}
+              className="add-var-input"
+            />
+            <input
+              type="text"
+              placeholder="Variable value"
+              value={newValue}
+              onChange={(e) => setNewValue(e.target.value)}
+              className="add-var-input"
+            />
+          </div>
+          <div className="form-actions">
+            <button
+              onClick={handleAddVariable}
+              disabled={!newKey.trim() || !newValue.trim()}
+              className="save-var-btn"
+            >
+              Add Variable
+            </button>
+            <button
+              onClick={cancelAddVariable}
+              className="cancel-var-btn"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       <table className="env-vars-table">
         <thead>
           <tr>
@@ -158,14 +239,14 @@ const EnvVariablesTable: React.FC<EnvVariablesTableProps> = ({
                         className="save-btn"
                         title="Save changes"
                       >
-                        ✓
+                        <Check size={14} />
                       </button>
                       <button 
                         onClick={handleCancelEdit}
                         className="cancel-btn"
                         title="Cancel editing"
                       >
-                        ✗
+                        <X size={14} />
                       </button>
                     </div>
                   </div>
@@ -181,28 +262,28 @@ const EnvVariablesTable: React.FC<EnvVariablesTableProps> = ({
                       className="action-btn copy-btn"
                       title="Copy to clipboard"
                     >
-                      📋
+                      <Copy size={14} />
                     </button>
                     <button
                       onClick={() => handleEdit(key, value)}
                       className="action-btn edit-btn"
                       title="Edit variable"
                     >
-                      ✏️
+                      <Edit3 size={14} />
                     </button>
                     <button
                       onClick={() => handlePushToProject(key, value)}
                       className="action-btn push-btn"
                       title="Push to project"
                     >
-                      📤
+                      <Send size={14} />
                     </button>
                     <button
                       onClick={() => setShowDeleteConfirm(key)}
                       className="action-btn delete-btn"
                       title="Delete variable"
                     >
-                      🗑️
+                      <Trash2 size={14} />
                     </button>
                   </>
                 )}

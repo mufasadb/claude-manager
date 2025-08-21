@@ -46,14 +46,14 @@ if (eventData.toolName === 'Bash' && eventData.commandDetails) {
         
         const suggestion = bunAlternatives[npmSubCommand];
         if (suggestion) {
-            console.log(`[Hook:${hookName}:suggestion] 💡 Consider using: ${suggestion}`);
+            console.log(`[Hook:${hookName}:suggestion] Consider using: ${suggestion}`);
             console.log(`[Hook:${hookName}:suggestion] Bun is faster and more efficient than npm!`);
             
             // For demonstration - you could potentially block the command here
             // by exiting with code 1, but we'll just suggest for now
             
         } else {
-            console.log(`[Hook:${hookName}:suggestion] 💡 Consider using bun instead of npm for better performance`);
+            console.log(`[Hook:${hookName}:suggestion] Consider using bun instead of npm for better performance`);
         }
         
         // Log the detection for analytics
@@ -71,7 +71,7 @@ if (eventData.toolName === 'Bash' && eventData.commandDetails) {
     
     // Check for dangerous commands
     if (detectedPatterns.includes('dangerous_command')) {
-        console.log(`[Hook:${hookName}:error] ⚠️ DANGEROUS COMMAND DETECTED: ${fullCommand}`);
+        console.log(`[Hook:${hookName}:error] WARNING: DANGEROUS COMMAND DETECTED: ${fullCommand}`);
         console.log(`[Hook:${hookName}:error] Please review this command carefully before proceeding`);
     }
 }

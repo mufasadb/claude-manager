@@ -3,9 +3,10 @@ const OllamaService = require('./integrations/ollama-service');
 const axios = require('axios');
 
 class MCPDiscoveryService {
-    constructor() {
-        this.openRouterService = new OpenRouterService();
+    constructor(claudeManagerInstance = null) {
+        this.openRouterService = new OpenRouterService(claudeManagerInstance);
         this.ollamaService = new OllamaService();
+        this.claudeManagerInstance = claudeManagerInstance;
         this.maxRetries = 5;
         this.retryDelay = 2000;
         this.maxSearchIterations = 3;

@@ -1,28 +1,166 @@
 .header {
-  background: #111827;
+  background: linear-gradient(135deg, rgba(17, 24, 39, 0.9) 0%, rgba(31, 41, 55, 0.8) 100%);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(66, 153, 225, 0.2);
   color: white;
-  padding: 1rem 2rem;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  padding: 1.5rem 2rem;
+  box-shadow: 
+    0 4px 20px rgba(0, 0, 0, 0.15),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
   display: flex;
   align-items: center;
   justify-content: space-between;
   position: relative;
+  overflow: hidden;
 }
 
-.header h1 {
-  font-size: 1.5rem;
-  font-weight: 600;
-  margin: 0;
+.header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(66, 153, 225, 0.1), transparent);
+  animation: shimmer 3s infinite;
+}
+
+.header-center {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  z-index: 2;
+}
+
+.dashboard-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 0;
+  background: linear-gradient(135deg, #e2e8f0, #cbd5e0);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 20px rgba(66, 153, 225, 0.3);
+  letter-spacing: -0.025em;
+}
+
+.project-header-section {
+  background: linear-gradient(135deg, rgba(66, 153, 225, 0.1), rgba(99, 179, 237, 0.05));
+  border: 1px solid rgba(66, 153, 225, 0.3);
+  border-radius: 12px;
+  padding: 12px 16px;
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  max-width: 450px;
+  transition: all 0.3s ease;
+}
+
+.project-header-section:hover {
+  background: linear-gradient(135deg, rgba(66, 153, 225, 0.15), rgba(99, 179, 237, 0.08));
+  border-color: rgba(66, 153, 225, 0.4);
+  box-shadow: 0 4px 12px rgba(66, 153, 225, 0.2);
+}
+
+.project-info-display {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.project-icon {
+  font-size: 24px;
+  background: linear-gradient(135deg, #4299e1, #3182ce);
+  border-radius: 8px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 4px rgba(66, 153, 225, 0.3);
+}
+
+.project-info {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.project-name {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-path {
+  font-size: 11px;
+  color: #a0aec0;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  margin-top: 2px;
+}
+
+.project-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.project-action-btn {
+  background: linear-gradient(135deg, rgba(74, 85, 104, 0.3), rgba(45, 55, 72, 0.5));
+  border: 1px solid rgba(99, 179, 237, 0.2);
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(5px);
+  color: #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 36px;
+}
+
+.project-action-btn:hover {
+  transform: translateY(-1px) scale(1.05);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.vscode-btn:hover {
+  background: linear-gradient(135deg, #007acc, #005a9e);
+  border-color: #007acc;
+  box-shadow: 0 4px 12px rgba(0, 122, 204, 0.4);
+}
+
+.finder-btn:hover {
+  background: linear-gradient(135deg, #f56500, #dd5502);
+  border-color: #f56500;
+  box-shadow: 0 4px 12px rgba(245, 101, 0, 0.4);
 }
 
 .header-left,
 .header-right {
   display: flex;
   align-items: center;
-  min-width: 200px;
+  min-width: 240px;
+  z-index: 2;
 }
 
 .header-right {
@@ -32,67 +170,177 @@
 .status-indicator {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.75rem;
   font-size: 0.875rem;
+  background: rgba(45, 55, 72, 0.6);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(66, 153, 225, 0.2);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
 }
 
 .session-countdown {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.75rem;
   font-size: 0.875rem;
+  background: rgba(45, 55, 72, 0.6);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(66, 153, 225, 0.2);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
 }
 
 .status-light,
 .countdown-light {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  box-shadow: 0 0 8px rgba(0, 0, 0, 0.3);
-  animation: pulse 2s infinite;
+  position: relative;
+  animation: statusPulse 2s infinite;
+}
+
+.status-light::after,
+.countdown-light::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: inherit;
+  box-shadow: 0 0 10px currentColor;
 }
 
 .status-text,
 .countdown-text {
-  color: #e5e7eb;
-  font-weight: 500;
+  color: #f1f5f9;
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  letter-spacing: 0.025em;
 }
 
-@keyframes pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+@keyframes shimmer {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+@keyframes statusPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
   }
-  70% {
-    box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  50% {
+    transform: scale(1.2);
+    opacity: 0.8;
   }
 }
 
 .session-stats-button {
-  background: #374151;
-  border: none;
-  border-radius: 6px;
-  padding: 0.5rem;
-  margin-left: 0.5rem;
-  color: #d1d5db;
+  background: linear-gradient(135deg, rgba(66, 153, 225, 0.2), rgba(99, 179, 237, 0.1));
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(66, 153, 225, 0.3);
+  border-radius: 10px;
+  padding: 0.6rem;
+  margin-left: 0.75rem;
+  color: #e2e8f0;
   cursor: pointer;
-  font-size: 1rem;
+  font-size: 1.1rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
-  min-width: 32px;
-  height: 32px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 36px;
+  height: 36px;
+  position: relative;
+  overflow: hidden;
+}
+
+.session-stats-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s ease;
+}
+
+.session-stats-button:hover::before {
+  left: 100%;
 }
 
 .session-stats-button:hover {
-  background: #4b5563;
-  color: #f3f4f6;
-  transform: translateY(-1px);
+  background: linear-gradient(135deg, rgba(66, 153, 225, 0.3), rgba(99, 179, 237, 0.2));
+  border-color: rgba(66, 153, 225, 0.5);
+  color: #ffffff;
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 6px 20px rgba(66, 153, 225, 0.3);
 }
 
 .session-stats-button:active {
-  transform: translateY(0);
+  transform: translateY(-1px) scale(1.02);
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+  .header {
+    padding: 1rem;
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+  
+  .header-center {
+    position: static;
+    transform: none;
+    order: 1;
+  }
+  
+  .header-left {
+    order: 2;
+    min-width: auto;
+    justify-content: center;
+  }
+  
+  .header-right {
+    order: 3;
+    min-width: auto;
+    justify-content: center;
+  }
+  
+  .project-header-section {
+    max-width: none;
+    padding: 10px 12px;
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .project-info-display {
+    justify-content: center;
+  }
+  
+  .project-actions {
+    justify-content: center;
+  }
+  
+  .project-name {
+    font-size: 1.1rem;
+  }
+  
+  .dashboard-title {
+    font-size: 1.5rem;
+    text-align: center;
+  }
+  
+  .status-indicator,
+  .session-countdown {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+  }
 }

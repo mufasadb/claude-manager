@@ -37,6 +37,45 @@ export class ApiService {
     }
   }
 
+  static async updateStatusDisplay(projectName: string, statusDisplay: string | null): Promise<void> {
+    const response = await fetch(`${API_BASE}/api/update-status-display`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ projectName, statusDisplay }),
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+  }
+
+  static async openInVSCode(projectPath: string): Promise<void> {
+    const response = await fetch(`${API_BASE}/api/open-vscode`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ projectPath }),
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+  }
+
+  static async openInFinder(projectPath: string): Promise<void> {
+    const response = await fetch(`${API_BASE}/api/open-finder`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ projectPath }),
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+  }
+
 
   static async saveFile(
     filePath: string,
@@ -362,14 +401,16 @@ export class ApiService {
   // MCP Discovery Methods
   static async discoverMCP(
     description: string,
-    preferredLLM: 'openrouter' | 'ollama' = 'openrouter'
+    preferredLLM: 'openrouter' | 'ollama' = 'openrouter',
+    scope?: 'user' | 'project',
+    projectPath?: string
   ): Promise<any> {
     const response = await fetch(`${API_BASE}/api/mcp/discover`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ description, preferredLLM }),
+      body: JSON.stringify({ description, preferredLLM, scope, projectPath }),
     });
     if (!response.ok) {
       const errorData = await response.json();
@@ -509,6 +550,24 @@ export class ApiService {
       },
       body: JSON.stringify({ scope, relativePath, projectName }),
     });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  static async getSlashCommandContent(
+    scope: 'user' | 'project',
+    relativePath: string,
+    projectName?: string
+  ): Promise<{ success: boolean; content?: string; error?: string }> {
+    const params = new URLSearchParams({ scope, relativePath });
+    if (projectName) {
+      params.append('projectName', projectName);
+    }
+    
+    const response = await fetch(`${API_BASE}/api/get-slash-command-content?${params}`);
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.error || `HTTP error! status: ${response.status}`);

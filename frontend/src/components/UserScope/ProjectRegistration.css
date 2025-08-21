@@ -1,0 +1,372 @@
+.projects-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+}
+
+.project-card {
+  background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+  border: 1px solid #4a5568;
+  border-radius: 12px;
+  padding: 20px;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.unregister-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: rgba(220, 53, 69, 0.1);
+  color: #dc3545;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  transition: all 0.2s ease;
+  z-index: 2;
+  opacity: 0;
+}
+
+.project-card:hover .unregister-btn {
+  opacity: 1;
+}
+
+.unregister-btn:hover {
+  background: #dc3545;
+  color: white;
+  transform: scale(1.1);
+}
+
+.project-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #4299e1, #63b3ed, #90cdf4);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.project-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+  border-color: #63b3ed;
+}
+
+.project-card:hover::before {
+  opacity: 1;
+}
+
+.project-header {
+  margin-bottom: 16px;
+}
+
+.project-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.project-name {
+  margin: 0 0 4px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #e2e8f0;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  word-break: break-word;
+}
+
+.project-path {
+  margin: 0;
+  font-size: 12px;
+  color: #a0aec0;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  word-break: break-all;
+  line-height: 1.4;
+  opacity: 0.8;
+}
+
+.project-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  min-width: 80px;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.action-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  transition: left 0.3s ease;
+}
+
+.action-btn:hover::before {
+  left: 100%;
+}
+
+
+.vscode-btn {
+  background: linear-gradient(135deg, #007acc, #005a9e);
+  color: white;
+  box-shadow: 0 2px 4px rgba(0, 122, 204, 0.3);
+}
+
+.vscode-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #005a9e, #004578);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 122, 204, 0.4);
+}
+
+.finder-btn {
+  background: linear-gradient(135deg, #f56500, #dd5502);
+  color: white;
+  box-shadow: 0 2px 4px rgba(245, 101, 0, 0.3);
+}
+
+.finder-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #dd5502, #c44c02);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(245, 101, 0, 0.4);
+}
+
+.action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.action-btn:disabled::before {
+  display: none;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .projects-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  
+  .project-card {
+    padding: 16px;
+  }
+  
+  .project-actions {
+    flex-direction: column;
+    gap: 6px;
+  }
+  
+  .action-btn {
+    width: 100%;
+  }
+}
+
+/* Animation for project cards appearing */
+.project-card {
+  animation: slideInUp 0.4s ease-out;
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Empty state styling */
+.projects-grid:empty + .help-text {
+  margin-top: 0;
+}
+
+/* Confirmation dialog */
+.confirmation-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  z-index: 10;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.confirmation-dialog {
+  background: #2d3748;
+  border: 1px solid #4a5568;
+  border-radius: 8px;
+  padding: 20px;
+  max-width: 280px;
+  text-align: center;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+}
+
+.confirmation-dialog h6 {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.confirmation-dialog p {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  color: #a0aec0;
+  line-height: 1.4;
+}
+
+.confirmation-dialog strong {
+  color: #e2e8f0;
+}
+
+.confirmation-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+/* Status Display Editing */
+.status-display-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: rgba(66, 153, 225, 0.08);
+  border-radius: 6px;
+  min-height: 32px;
+}
+
+.status-display-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+  width: 80px;
+}
+
+.status-display-value {
+  font-size: 12px;
+  color: #cbd5e0;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  cursor: pointer;
+  flex: 1;
+  padding: 3px 6px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.status-display-value:hover {
+  background: rgba(66, 153, 225, 0.15);
+  color: #63b3ed;
+}
+
+.status-display-input-inline {
+  flex: 1;
+  padding: 3px 6px;
+  border: 1px solid rgba(66, 153, 225, 0.5);
+  border-radius: 4px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 12px;
+  background: rgba(26, 32, 44, 0.8);
+  color: #f1f5f9;
+  transition: all 0.3s ease;
+  min-width: 0;
+}
+
+.status-display-input-inline:focus {
+  outline: none;
+  border-color: #4299e1;
+  box-shadow: 0 0 0 2px rgba(66, 153, 225, 0.3);
+  background: rgba(66, 153, 225, 0.1);
+}
+
+.confirm-btn {
+  background: #dc3545;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: background 0.2s ease;
+}
+
+.confirm-btn:hover:not(:disabled) {
+  background: #c82333;
+}
+
+.confirm-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cancel-confirm-btn {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: background 0.2s ease;
+}
+
+.cancel-confirm-btn:hover {
+  background: #545b62;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
