@@ -192,3 +192,59 @@ Centralized API key and configuration management across all projects:
 
 **Why is it saying my sessions are only 4 and a bit hours long?**
 Noone has actually come out and told us howi t works but in my experience my usage rolls ove if im nearing limits on the clock, so i've built this app assuming that the timer starts 4+remaining minutes in hour (based on gmt)
+
+## Context-Aware Status Line
+
+Claude Manager includes an intelligent status line script that provides real-time context usage information using the same calculation method as Claude Code's `/context` command.
+
+### Features
+
+**Accurate Token Calculation**: Uses the same methodology as `/context` by analyzing JSONL session files
+**Smart Emoji Indicators**: Shows what's consuming the most context space:
+- 🔧 **Tools** - When tool usage dominates your context
+- ⚙️ **System** - When system prompt/memory files dominate  
+- 💬 **Messages** - When conversation history dominates
+- Falls back to activity-based emojis (🧪 testing, ✍️ writing, 📖 reading, etc.)
+
+**Color-Coded Usage**: Green (0-25%), Yellow (26-75%), Red (76-99%)
+**Dashboard Integration**: Shows Claude Manager URL for quick access
+
+### Installation
+
+**Quick Setup:**
+```bash
+# Copy the status line script to your Claude config
+cp statusline-context-aware.sh ~/.claude/statusline.sh
+chmod +x ~/.claude/statusline.sh
+
+# Add to your Claude Code settings
+cat >> ~/.claude/settings.json << 'EOF'
+{
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/statusline.sh",
+    "padding": 0
+  }
+}
+EOF
+```
+
+**Manual Configuration:**
+1. Copy `statusline-context-aware.sh` to `~/.claude/statusline.sh`
+2. Make it executable: `chmod +x ~/.claude/statusline.sh`
+3. Add to your `~/.claude/settings.json`:
+```json
+{
+  "statusLine": {
+    "type": "command", 
+    "command": "~/.claude/statusline.sh"
+  }
+}
+```
+
+**Output Format:**
+```
+http://localhost:3456 | 🔧 | 17% context
+```
+
+The status line updates automatically as your context usage changes and will accurately reflect token consumption patterns shown in `/context`.
