@@ -30,8 +30,8 @@ if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
       fi
     done <<< "$USAGE_DATA"
     
-    # Analyze token categories like /context does
-    cat "$TRANSCRIPT_PATH" 2>/dev/null | jq -r '
+    # Enhanced token categorization like /context command
+    cat "$TRANSCRIPT_PATH" 2>/dev/null | jq '
       select(.message.usage != null) | 
       {
         type: .type,
@@ -39,25 +39,77 @@ if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
         output: (.message.usage.output_tokens // 0),
         cache_creation: (.message.usage.cache_creation_input_tokens // 0),
         cache_read: (.message.usage.cache_read_input_tokens // 0),
-        has_tools: ((.message.content // []) | map(select(.type == "tool_use" or .type == "tool_result")) | length > 0)
+        has_tools: (if (.message.content | type) == "array" then (.message.content | map(select(.type == "tool_use" or .type == "tool_result")) | length > 0) else false end),
+        tool_names: (if (.message.content | type) == "array" then [.message.content[] | select(.type == "tool_use") | .name] else [] end),
+        is_system: (.type == "system" or (.message.role // "") == "system"),
+        content_str: (.message.content | tostring)
       }' 2>/dev/null | jq -s '
+      # Calculate detailed categorization
       {
-        total_input: map(.input) | add,
-        total_output: map(.output) | add,
-        total_cache_creation: map(.cache_creation) | add,
-        total_cache_read: map(.cache_read) | add,
-        tool_messages: map(select(.has_tools)) | length,
-        user_messages: map(select(.type == "user")) | length,
-        assistant_messages: map(select(.type == "assistant")) | length
+        total_input: (map(.input) | add // 0),
+        total_output: (map(.output) | add // 0),
+        total_cache_creation: (map(.cache_creation) | add // 0),
+        total_cache_read: (map(.cache_read) | add // 0),
+        
+        # System prompt tokens (cache_creation for system messages)
+        system_prompt_tokens: (map(select(.is_system) | .cache_creation) | add // 0),
+        
+        # System tools (built-in Claude tools)
+        system_tool_tokens: (map(select(.has_tools and (.tool_names | length > 0) and (.tool_names | map(test("^(Read|Write|Edit|Bash|Glob|Grep|TodoWrite|Task|WebFetch|WebSearch|LS|MultiEdit|NotebookEdit|ExitPlanMode)$")) | any)) | .input + .output) | add // 0),
+        
+        # MCP tools (tools starting with mcp__)
+        mcp_tool_tokens: (map(select(.has_tools and (.tool_names | length > 0) and (.tool_names | map(test("^mcp__")) | any)) | .input + .output) | add // 0),
+        
+        # Custom agents (tools starting with agent names or custom patterns)
+        custom_agent_tokens: (map(select(.has_tools and (.tool_names | length > 0) and (.tool_names | map(test("^(test|Researcher|general-purpose|statusline-setup|output-style-setup)$")) | any)) | .input + .output) | add // 0),
+        
+        # Memory files (messages containing CLAUDE.md or memory references)
+        memory_tokens: (map(select(.content_str | test("CLAUDE\\.md|memory|context")) | .input + .output) | add // 0),
+        
+        # Regular conversation messages (non-tool, non-system)
+        message_tokens: (map(select(.type == "user" or .type == "assistant") | select(.has_tools | not) | select(.is_system | not) | select((.content_str | test("CLAUDE\\.md|memory|context")) | not) | .input + .output) | add // 0),
+        
+        # Counts for reference  
+        tool_messages: (map(select(.has_tools)) | length),
+        user_messages: (map(select(.type == "user")) | length),
+        assistant_messages: (map(select(.type == "assistant")) | length)
       }' > /tmp/context_analysis.json 2>/dev/null
     
-    # Read the analysis
+    # Read the detailed analysis
     if [ -f /tmp/context_analysis.json ]; then
       ANALYSIS=$(cat /tmp/context_analysis.json 2>/dev/null)
-      TOOL_TOKENS=$(echo "$ANALYSIS" | jq -r '.tool_messages * 50 // 0' 2>/dev/null)
-      MESSAGE_TOKENS=$(echo "$ANALYSIS" | jq -r '(.total_input + .total_output) // 0' 2>/dev/null)
-      SYSTEM_TOKENS=$(echo "$ANALYSIS" | jq -r '.total_cache_creation // 0' 2>/dev/null)
+      
+      # Extract categorized token counts
+      SYSTEM_PROMPT_TOKENS=$(echo "$ANALYSIS" | jq -r '.system_prompt_tokens // 0' 2>/dev/null)
+      SYSTEM_TOOL_TOKENS=$(echo "$ANALYSIS" | jq -r '.system_tool_tokens // 0' 2>/dev/null)
+      MCP_TOOL_TOKENS=$(echo "$ANALYSIS" | jq -r '.mcp_tool_tokens // 0' 2>/dev/null)
+      CUSTOM_AGENT_TOKENS=$(echo "$ANALYSIS" | jq -r '.custom_agent_tokens // 0' 2>/dev/null)
+      MEMORY_TOKENS=$(echo "$ANALYSIS" | jq -r '.memory_tokens // 0' 2>/dev/null)
+      MESSAGE_TOKENS=$(echo "$ANALYSIS" | jq -r '.message_tokens // 0' 2>/dev/null)
+      
+      # Handle empty values and convert to integers
+      SYSTEM_PROMPT_TOKENS=${SYSTEM_PROMPT_TOKENS:-0}
+      SYSTEM_TOOL_TOKENS=${SYSTEM_TOOL_TOKENS:-0}
+      MCP_TOOL_TOKENS=${MCP_TOOL_TOKENS:-0}
+      CUSTOM_AGENT_TOKENS=${CUSTOM_AGENT_TOKENS:-0}
+      MEMORY_TOKENS=${MEMORY_TOKENS:-0}
+      MESSAGE_TOKENS=${MESSAGE_TOKENS:-0}
+      
+      # Legacy fallbacks for compatibility
+      TOOL_TOKENS=$((SYSTEM_TOOL_TOKENS + MCP_TOOL_TOKENS + CUSTOM_AGENT_TOKENS))
+      SYSTEM_TOKENS=$((SYSTEM_PROMPT_TOKENS + MEMORY_TOKENS))
+      
       rm -f /tmp/context_analysis.json
+    else
+      # Fallback values if analysis fails
+      SYSTEM_PROMPT_TOKENS=0
+      SYSTEM_TOOL_TOKENS=0
+      MCP_TOOL_TOKENS=0
+      CUSTOM_AGENT_TOKENS=0
+      MEMORY_TOKENS=0
+      MESSAGE_TOKENS=0
+      TOOL_TOKENS=0
+      SYSTEM_TOKENS=0
     fi
     
     # Use latest cache_read as current context (like /context shows)
@@ -79,7 +131,15 @@ if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
   # Claude Sonnet context window is 200k tokens
   CONTEXT_PERCENT=$((ESTIMATED_TOKENS * 100 / 200000))
   
-  # Determine biggest consumer for emoji
+  # Calculate individual category percentages (matching /context command)
+  SYSTEM_PROMPT_PERCENT=$(( (SYSTEM_PROMPT_TOKENS + 0) * 100 / 200000 ))
+  SYSTEM_TOOL_PERCENT=$(( (SYSTEM_TOOL_TOKENS + 0) * 100 / 200000 ))
+  MCP_TOOL_PERCENT=$(( (MCP_TOOL_TOKENS + 0) * 100 / 200000 ))
+  CUSTOM_AGENT_PERCENT=$(( (CUSTOM_AGENT_TOKENS + 0) * 100 / 200000 ))
+  MEMORY_PERCENT=$(( (MEMORY_TOKENS + 0) * 100 / 200000 ))
+  MESSAGE_PERCENT=$(( (MESSAGE_TOKENS + 0) * 100 / 200000 ))
+  
+  # Determine biggest consumer for fallback emoji
   BIGGEST_CONSUMER="messages"
   if [ "$TOOL_TOKENS" -gt "$MESSAGE_TOKENS" ] && [ "$TOOL_TOKENS" -gt "$SYSTEM_TOKENS" ]; then
     BIGGEST_CONSUMER="tools"
@@ -97,9 +157,27 @@ if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
     CONTEXT_PERCENT=0
   fi
 else
-  # Fallback estimation
+  # Fallback estimation when no transcript available
   DATA_SIZE=${#SESSION_DATA}
-  CONTEXT_PERCENT=$((DATA_SIZE / 4 / 200000 * 100))
+  ESTIMATED_TOKENS=$((DATA_SIZE / 4))
+  CONTEXT_PERCENT=$((ESTIMATED_TOKENS * 100 / 200000))
+  
+  # Fallback category estimates (rough approximations)
+  SYSTEM_PROMPT_TOKENS=$((ESTIMATED_TOKENS / 10))  # ~10% system prompt
+  SYSTEM_TOOL_TOKENS=$((ESTIMATED_TOKENS / 2))     # ~50% system tools
+  MCP_TOOL_TOKENS=$((ESTIMATED_TOKENS / 20))       # ~5% MCP tools
+  CUSTOM_AGENT_TOKENS=$((ESTIMATED_TOKENS / 100))  # ~1% custom agents
+  MEMORY_TOKENS=$((ESTIMATED_TOKENS / 8))          # ~12% memory
+  MESSAGE_TOKENS=$((ESTIMATED_TOKENS / 5))         # ~20% messages
+  
+  # Calculate fallback percentages
+  SYSTEM_PROMPT_PERCENT=$((SYSTEM_PROMPT_TOKENS * 100 / 200000))
+  SYSTEM_TOOL_PERCENT=$((SYSTEM_TOOL_TOKENS * 100 / 200000))
+  MCP_TOOL_PERCENT=$((MCP_TOOL_TOKENS * 100 / 200000))
+  CUSTOM_AGENT_PERCENT=$((CUSTOM_AGENT_TOKENS * 100 / 200000))
+  MEMORY_PERCENT=$((MEMORY_TOKENS * 100 / 200000))
+  MESSAGE_PERCENT=$((MESSAGE_TOKENS * 100 / 200000))
+  
   BIGGEST_CONSUMER="unknown"
   if [ $CONTEXT_PERCENT -gt 99 ]; then
     CONTEXT_PERCENT=99
@@ -109,39 +187,78 @@ else
   fi
 fi
 
-# Determine status emoji based on biggest context consumer
-case "$BIGGEST_CONSUMER" in
-  "tools")
-    STATUS="🔧"  # Hammer for tool usage
-    ;;
-  "system")
-    STATUS="⚙️"  # Gear for system/memory/setup
-    ;;
-  "messages")
-    STATUS="💬"  # Speech bubble for conversation
-    ;;
-  *)
-    # Fallback: detect current activity from recent data
-    RECENT_DATA=$(echo "$SESSION_DATA" | tail -c 1000)
-    if echo "$RECENT_DATA" | grep -qi -E "(test|testing|screenshot|browser|playwright)"; then
-      STATUS="🧪"
-    elif echo "$RECENT_DATA" | grep -qi -E "(write|edit|create|multiedit|notebookedit)"; then
-      STATUS="✍️"
-    elif echo "$RECENT_DATA" | grep -qi -E "(read|grep|glob|ls|cat)"; then
-      STATUS="📖"
-    elif echo "$RECENT_DATA" | grep -qi -E "(plan|todo|thinking|analyze)"; then
-      STATUS="🤔"
-    elif echo "$RECENT_DATA" | grep -qi -E "(bash|command|exec|run)"; then
-      STATUS="⚡"
-    elif echo "$RECENT_DATA" | grep -qi -E "(search|fetch|web|api)"; then
-      STATUS="🔍"
-    elif echo "$RECENT_DATA" | grep -qi -E "(complete|done|finish|ready)"; then
-      STATUS="✅"
-    else
-      STATUS="💭"
-    fi
-    ;;
-esac
+# Build categorized emoji status string (like /context command)
+CATEGORY_EMOJIS=""
+
+# Add each category if it has >0 tokens (show as 1% minimum if non-zero)
+if [ "$SYSTEM_PROMPT_TOKENS" -gt 0 ]; then
+  DISPLAY_PERCENT=$((SYSTEM_PROMPT_PERCENT > 0 ? SYSTEM_PROMPT_PERCENT : 1))
+  CATEGORY_EMOJIS="${CATEGORY_EMOJIS}🧠${DISPLAY_PERCENT}% "
+fi
+
+if [ "$SYSTEM_TOOL_TOKENS" -gt 0 ]; then
+  DISPLAY_PERCENT=$((SYSTEM_TOOL_PERCENT > 0 ? SYSTEM_TOOL_PERCENT : 1))
+  CATEGORY_EMOJIS="${CATEGORY_EMOJIS}⚙️${DISPLAY_PERCENT}% "
+fi
+
+if [ "$MCP_TOOL_TOKENS" -gt 0 ]; then
+  DISPLAY_PERCENT=$((MCP_TOOL_PERCENT > 0 ? MCP_TOOL_PERCENT : 1))
+  CATEGORY_EMOJIS="${CATEGORY_EMOJIS}🔧${DISPLAY_PERCENT}% "
+fi
+
+if [ "$CUSTOM_AGENT_TOKENS" -gt 0 ]; then
+  DISPLAY_PERCENT=$((CUSTOM_AGENT_PERCENT > 0 ? CUSTOM_AGENT_PERCENT : 1))
+  CATEGORY_EMOJIS="${CATEGORY_EMOJIS}🤖${DISPLAY_PERCENT}% "
+fi
+
+if [ "$MEMORY_TOKENS" -gt 0 ]; then
+  DISPLAY_PERCENT=$((MEMORY_PERCENT > 0 ? MEMORY_PERCENT : 1))
+  CATEGORY_EMOJIS="${CATEGORY_EMOJIS}📝${DISPLAY_PERCENT}% "
+fi
+
+if [ "$MESSAGE_TOKENS" -gt 0 ]; then
+  DISPLAY_PERCENT=$((MESSAGE_PERCENT > 0 ? MESSAGE_PERCENT : 1))
+  CATEGORY_EMOJIS="${CATEGORY_EMOJIS}💬${DISPLAY_PERCENT}% "
+fi
+
+# Fallback single emoji if no categories detected
+if [ -z "$CATEGORY_EMOJIS" ]; then
+  case "$BIGGEST_CONSUMER" in
+    "tools")
+      CATEGORY_EMOJIS="🔧 "
+      ;;
+    "system")
+      CATEGORY_EMOJIS="⚙️ "
+      ;;
+    "messages")
+      CATEGORY_EMOJIS="💬 "
+      ;;
+    *)
+      # Activity-based fallback
+      RECENT_DATA=$(echo "$SESSION_DATA" | tail -c 1000)
+      if echo "$RECENT_DATA" | grep -qi -E "(test|testing|screenshot|browser|playwright)"; then
+        CATEGORY_EMOJIS="🧪 "
+      elif echo "$RECENT_DATA" | grep -qi -E "(write|edit|create|multiedit|notebookedit)"; then
+        CATEGORY_EMOJIS="✍️ "
+      elif echo "$RECENT_DATA" | grep -qi -E "(read|grep|glob|ls|cat)"; then
+        CATEGORY_EMOJIS="📖 "
+      elif echo "$RECENT_DATA" | grep -qi -E "(plan|todo|thinking|analyze)"; then
+        CATEGORY_EMOJIS="🤔 "
+      elif echo "$RECENT_DATA" | grep -qi -E "(bash|command|exec|run)"; then
+        CATEGORY_EMOJIS="⚡ "
+      elif echo "$RECENT_DATA" | grep -qi -E "(search|fetch|web|api)"; then
+        CATEGORY_EMOJIS="🔍 "
+      elif echo "$RECENT_DATA" | grep -qi -E "(complete|done|finish|ready)"; then
+        CATEGORY_EMOJIS="✅ "
+      else
+        CATEGORY_EMOJIS="💭 "
+      fi
+      ;;
+  esac
+fi
+
+# Trim trailing space
+CATEGORY_EMOJIS=$(echo "$CATEGORY_EMOJIS" | sed 's/ $//')
 
 # Format context percentage bar with colors
 if [ $CONTEXT_PERCENT -le 25 ]; then
@@ -168,4 +285,4 @@ else
 fi
 
 # Use printf with -e flag to properly interpret escape sequences
-printf "%s | %s | %b%d%%\e[0m context\n" "$STATUS_DISPLAY" "$STATUS" "$BAR_COLOR" "$CONTEXT_PERCENT"
+printf "%s | %s | %b%d%%\e[0m context\n" "$STATUS_DISPLAY" "$CATEGORY_EMOJIS" "$BAR_COLOR" "$CONTEXT_PERCENT"

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ApiService } from '../../services/ApiService';
 import { MCPTemplate, MCP, MCPState } from '../../types';
 import { Bot, ClipboardList, Folder, Plug, Trash2 } from 'lucide-react';
+import InstallationInstructionModal from './InstallationInstructionModal';
 import './MCPManagement.css';
 
 interface MCPManagementProps {
@@ -40,6 +41,8 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
   const [discoveryResult, setDiscoveryResult] = useState<any>(null);
   const [discoveryLoading, setDiscoveryLoading] = useState(false);
   const [discoveredEnvVars, setDiscoveredEnvVars] = useState<Record<string, string>>({});
+  const [showInstallationModal, setShowInstallationModal] = useState(false);
+  const [installationInstructions, setInstallationInstructions] = useState<any>(null);
 
   useEffect(() => {
     loadTemplates();
@@ -433,11 +436,50 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
 
       if (!result.success) {
         setError(result.error || 'Failed to discover MCP server');
+        return;
+      }
+
+      // Check if this is a complex installation that requires manual steps
+      if (result.data?.template?.installationType === 'complex') {
+        setInstallationInstructions({
+          mcpName: result.data.template.template.name,
+          mcpDescription: result.data.template.template.description,
+          installationSteps: result.data.template.template.installationSteps || [],
+          environmentVars: result.data.template.template.envVars || [],
+          finalCommand: result.data.template.template.finalCommand || {
+            command: result.data.template.template.command || 'node',
+            args: result.data.template.template.args || [],
+            transport: result.data.template.template.transport || 'stdio'
+          }
+        });
+        setShowInstallationModal(true);
       }
     } catch (err) {
       setError(`Discovery failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setDiscoveryLoading(false);
+    }
+  };
+
+  const handleCloseInstallationModal = () => {
+    setShowInstallationModal(false);
+    setInstallationInstructions(null);
+  };
+
+  const handleSaveAsTemplate = async (templateData: any) => {
+    try {
+      setError(null);
+      const result = await ApiService.saveComplexTemplate(templateData);
+      
+      if (result.success) {
+        setWarning(`Template "${result.templateName}" saved successfully! You can now find it in the MCP templates list.`);
+        await loadTemplates(); // Reload templates to show the new one
+        handleCloseInstallationModal();
+      } else {
+        setError(result.error || 'Failed to save template');
+      }
+    } catch (err) {
+      setError(`Failed to save template: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
 
@@ -753,6 +795,20 @@ const MCPManagement: React.FC<MCPManagementProps> = ({ scope, projectPath, onMCP
           </>
         )}
       </div>
+
+      {/* Installation Instructions Modal */}
+      {installationInstructions && (
+        <InstallationInstructionModal
+          isOpen={showInstallationModal}
+          onClose={handleCloseInstallationModal}
+          onSaveAsTemplate={handleSaveAsTemplate}
+          mcpName={installationInstructions.mcpName}
+          mcpDescription={installationInstructions.mcpDescription}
+          installationSteps={installationInstructions.installationSteps}
+          environmentVars={installationInstructions.environmentVars}
+          finalCommand={installationInstructions.finalCommand}
+        />
+      )}
     </div>
   );
 };

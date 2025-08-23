@@ -200,17 +200,32 @@ Respond with JSON:
             {
                 title: 'Model Context Protocol Servers - Official Collection',
                 url: 'https://github.com/modelcontextprotocol/servers',
-                snippet: 'Collection of reference MCP servers including filesystem, git, postgres, sqlite, fetch, and more.'
+                snippet: 'Collection of reference MCP servers including filesystem, git, postgres, sqlite, fetch, and more. Fetch server requires manual installation from source.'
             },
             {
-                title: 'Supabase MCP Server',
-                url: 'https://github.com/supabase/mcp-server-supabase', 
-                snippet: 'MCP server for Supabase integration with Claude Code. Supports database operations and real-time subscriptions.'
+                title: 'Supabase MCP Server - npm package',
+                url: 'https://www.npmjs.com/package/@supabase/mcp-server-supabase', 
+                snippet: 'MCP server for Supabase integration via npx @supabase/mcp-server-supabase. Available as npm package for easy installation.'
             },
             {
-                title: 'Atlassian MCP Server - sooperset',
+                title: 'Context7 MCP Server - npm package',
+                url: 'https://www.npmjs.com/package/@upstash/context7-mcp',
+                snippet: 'MCP server for Context7 integration via npx @upstash/context7-mcp. Available as npm package for easy installation.'
+            },
+            {
+                title: 'Playwright MCP Server - npm package',
+                url: 'https://www.npmjs.com/package/@playwright/mcp',
+                snippet: 'MCP server for browser automation via npx @playwright/mcp. Available as npm package with browser options.'
+            },
+            {
+                title: 'MCP Fetch Server - GitHub Source Only',
+                url: 'https://github.com/modelcontextprotocol/servers/tree/main/src/fetch',
+                snippet: 'HTTP/fetch testing server for browser automation. No npm package available - requires cloning and building from GitHub source.'
+            },
+            {
+                title: 'Atlassian MCP Server - GitHub Source Only',
                 url: 'https://github.com/sooperset/mcp-atlassian',
-                snippet: 'MCP server for Atlassian Jira integration. Supports issue management, project tracking, and team collaboration.'
+                snippet: 'MCP server for Atlassian Jira integration. Requires manual installation and configuration from GitHub repository.'
             }
         ];
 
@@ -222,7 +237,16 @@ Respond with JSON:
             queryLower.split(' ').some(word => mcp.snippet.toLowerCase().includes(word))
         );
 
-        return relevantResults.length > 0 ? relevantResults : commonMCPs.slice(0, 2);
+        // If searching for browser/fetch/testing related terms, prioritize fetch server
+        if (queryLower.includes('browser') || queryLower.includes('fetch') || queryLower.includes('test')) {
+            const fetchResult = commonMCPs.find(mcp => mcp.title.includes('Fetch Server'));
+            const playwrightResult = commonMCPs.find(mcp => mcp.title.includes('Playwright'));
+            if (fetchResult && playwrightResult) {
+                return [fetchResult, playwrightResult];
+            }
+        }
+
+        return relevantResults.length > 0 ? relevantResults : commonMCPs.slice(0, 3);
     }
 
     /**
@@ -300,50 +324,75 @@ ${JSON.stringify(mcpInfo, null, 2)}
 RESEARCH CONTEXT:
 ${JSON.stringify(research, null, 2)}
 
-Your job is to create a template that generates the EXACT Claude CLI commands needed.
+Your job is to determine if this MCP server can be installed with a simple npx/docker command or requires complex manual installation.
 
-CLAUDE CLI COMMAND FORMAT:
-The final commands should be like:
-- claude mcp add <server-name> <command> [args...]
-- claude mcp remove <server-name>
-- claude mcp enable <server-name>
-- claude mcp disable <server-name>
+SIMPLE INSTALLATION (npx packages):
+For servers available as npm packages, generate a standard template.
 
-EXAMPLE TEMPLATES:
-{
-  "templateKey": "supabase",
-  "template": {
-    "name": "Supabase",
-    "description": "Database operations and real-time subscriptions",
-    "command": "npx",
-    "transport": "stdio", 
-    "envVars": [
-      {"key": "SUPABASE_URL", "description": "Your Supabase project URL", "required": true},
-      {"key": "SUPABASE_ANON_KEY", "description": "Your Supabase anon key", "required": true}
-    ],
-    "args": ["-y", "@supabase/mcp-server-supabase@latest", "--read-only"]
-  }
-}
+COMPLEX INSTALLATION (requires cloning, building, custom setup):
+For servers that require manual steps, provide installation instructions.
 
-Generate a template following this EXACT format:
+EXAMPLE SIMPLE TEMPLATE:
 {
   "success": true,
   "data": {
-    "templateKey": "unique-identifier",
+    "installationType": "simple",
+    "templateKey": "supabase",
     "template": {
-      "name": "Display Name",
-      "description": "Brief description",
-      "command": "main-command (npx, docker, etc.)",
-      "transport": "stdio",
-      "envVars": [{
-        "key": "REQUIRED_VAR",
-        "description": "What this does", 
-        "required": true
-      }],
-      "args": ["array", "of", "command", "arguments"]
+      "name": "Supabase",
+      "description": "Database operations and real-time subscriptions",
+      "command": "npx",
+      "transport": "stdio", 
+      "envVars": [
+        {"key": "SUPABASE_URL", "description": "Your Supabase project URL", "required": true}
+      ],
+      "args": ["-y", "@supabase/mcp-server-supabase@latest", "--read-only"]
     }
   }
-}`;
+}
+
+EXAMPLE COMPLEX TEMPLATE:
+{
+  "success": true,
+  "data": {
+    "installationType": "complex",
+    "templateKey": "fetch-server",
+    "template": {
+      "name": "Fetch Server",
+      "description": "HTTP/fetch testing for browser automation",
+      "installationSteps": [
+        {
+          "command": "git clone https://github.com/modelcontextprotocol/servers.git mcp-servers",
+          "description": "Clone the MCP servers repository",
+          "workingDirectory": "~/",
+          "requiresManualAction": false
+        },
+        {
+          "command": "cd mcp-servers && npm install",
+          "description": "Install dependencies for all MCP servers",
+          "workingDirectory": "~/mcp-servers",
+          "requiresManualAction": false
+        },
+        {
+          "command": "cd src/fetch && npm run build",
+          "description": "Build the fetch server specifically",
+          "workingDirectory": "~/mcp-servers",
+          "requiresManualAction": false
+        }
+      ],
+      "finalCommand": {
+        "command": "node",
+        "args": ["~/mcp-servers/src/fetch/dist/index.js", "--port", "$PORT"],
+        "transport": "stdio"
+      },
+      "envVars": [
+        {"key": "PORT", "description": "Port for the fetch server to listen on", "required": true}
+      ]
+    }
+  }
+}
+
+Analyze the MCP server info and determine whether it requires simple or complex installation. Return the appropriate format.`;
 
         try {
             if (preferredLLM === 'openrouter' && process.env.OPENROUTER_API_KEY) {

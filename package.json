@@ -9,14 +9,14 @@
   "license": "MIT",
   "scripts": {
     "start": "cd backend && bun run index.js",
-    "dev": "concurrently --names backend,frontend --colors blue,green \"cd backend && bun --watch index.js\" \"cd frontend && PORT=3456 BROWSER=none npm start\"",
+    "dev": "concurrently --names backend,frontend --colors blue,green \"cd backend && bun --watch index.js\" \"cd frontend && PORT=3456 BROWSER=none bun start\"",
     "build": "cd frontend && bun run build",
     "clean": "rm -rf backend/node_modules frontend/node_modules backend/bun.lockb frontend/bun.lockb",
     "test": "cd frontend && bun run test",
     "typecheck": "cd frontend && bun run tsc --noEmit",
     "claude:register": "cd backend && bun run register-project.js",
-    "health-check": "node test-service.js",
-    "run-and-test": "node run-and-test.js"
+    "health-check": "bun test-service.js",
+    "run-and-test": "bun run-and-test.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.17.1",
@@ -45,6 +45,7 @@
   "engines": {
     "node": "~20"
   },
+  "packageManager": "bun@1.2.14",
   "directories": {
     "doc": "docs",
     "example": "examples"

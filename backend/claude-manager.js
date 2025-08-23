@@ -1503,6 +1503,72 @@ class ClaudeManager {
       }
     });
 
+    // Save Complex Installation Template Endpoint
+    this.app.post('/api/mcp/save-complex-template', async (req, res) => {
+      try {
+        const { templateData } = req.body;
+        
+        if (!templateData || !templateData.name) {
+          return res.status(400).json({ 
+            success: false, 
+            error: 'Template data with name is required' 
+          });
+        }
+
+        // Generate a template key from the name
+        const templateKey = templateData.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+        
+        // Create the template object
+        const template = {
+          name: templateData.name,
+          description: templateData.description,
+          installationType: 'complex',
+          installationSteps: templateData.installationSteps || [],
+          environmentVars: templateData.environmentVars || [],
+          finalCommand: templateData.finalCommand,
+          transport: templateData.finalCommand?.transport || 'stdio',
+          createdAt: templateData.createdAt || Date.now(),
+          // Convert to standard template format for compatibility
+          command: templateData.finalCommand?.command || 'node',
+          args: templateData.finalCommand?.args || [],
+          envVars: templateData.environmentVars || []
+        };
+
+        // Save to MCP service templates
+        this.mcpService.templates[templateKey] = template;
+
+        // Also save to a persistent file for complex templates
+        const complexTemplatesPath = path.join(this.userDataDir, 'complex-templates.json');
+        let complexTemplates = {};
+        
+        try {
+          if (await fs.pathExists(complexTemplatesPath)) {
+            complexTemplates = await fs.readJson(complexTemplatesPath);
+          }
+        } catch (error) {
+          console.warn('Could not read existing complex templates:', error.message);
+        }
+
+        complexTemplates[templateKey] = template;
+        await fs.writeJson(complexTemplatesPath, complexTemplates, { spaces: 2 });
+
+        res.json({
+          success: true,
+          templateKey,
+          templateName: template.name,
+          message: `Complex installation template "${template.name}" has been saved successfully!`,
+          template
+        });
+
+      } catch (error) {
+        console.error('Failed to save complex template:', error);
+        res.status(500).json({ 
+          success: false, 
+          error: error.message 
+        });
+      }
+    });
+
     // MCP Logs Endpoint
     this.app.get('/api/mcp/logs/:scope/:mcpName', async (req, res) => {
       try {

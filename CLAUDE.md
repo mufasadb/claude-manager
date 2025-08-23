@@ -365,3 +365,49 @@ The hooks documentation includes:
 - **Hook templates**: `backend/config/hooks.js`
 
 This system is designed for real-time collaboration and management of Claude Code across multiple projects. The key is understanding the dual-scope architecture (user vs project), the centralized state management, and the real-time WebSocket communication pattern.
+
+## Critical MCP Testing - Playwright Regression Prevention
+
+**⚠️ IMPORTANT: Playwright MCP breaks frequently due to argument format changes**
+
+The Playwright MCP template is THE EASIEST one to get working but historically breaks due to command format issues. We have a regression test to prevent this:
+
+**Test Before Any MCP Service Changes:**
+```bash
+./test_playwright_mcp.sh          # Quick verification tests
+./test_playwright_mcp.sh --install # Full installation test
+```
+
+**What the Test Validates:**
+1. Raw `npx @playwright/mcp` command works
+2. Template format `npx @playwright/mcp --browser chrome` works  
+3. Claude CLI command format is correct
+4. API template has correct arguments
+5. (Optional) Actual installation/removal works
+
+**Current Working Template:**
+```javascript
+'playwright': {
+  name: 'Playwright',
+  description: 'Browser automation for testing and scraping',
+  command: 'npx',
+  args: ['@playwright/mcp', '--browser', 'chrome'],
+  transport: 'stdio',
+  envVars: []
+}
+```
+
+**⚠️ NEVER use `-y` flag with `@playwright/mcp` - it doesn't support it!**
+
+**If Playwright MCP breaks again:**
+1. Run the test to identify the issue
+2. Check `npx @playwright/mcp --help` for current argument format
+3. Update the template in `backend/services/mcp-service.js`
+4. Re-run the test to verify the fix
+5. Update the template documentation above
+
+**Why This Matters:**
+- Playwright MCP is the simplest browser automation tool
+- It requires no environment variables or complex setup
+- It's often the first MCP users try
+- When it breaks, users lose confidence in the entire system

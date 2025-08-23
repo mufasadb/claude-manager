@@ -20,8 +20,8 @@ Claude Manager is a dual-service web application that provides unified managemen
 ### Prerequisites & Installation
 
 **System Requirements:**
-- [Bun](https://bun.sh) - Primary JavaScript runtime and package manager
-- Node.js 20+ - Required for the application runtime
+- [Bun](https://bun.sh) - JavaScript runtime and package manager (primary)
+- Node.js 20+ - Required for the application runtime  
 - [Claude Code CLI](https://claude.ai/cli) - Required for MCP server management
 
 **Quick Installation:**
@@ -52,7 +52,7 @@ bun run dev  # Starts both backend (port 3455) + frontend (port 3456)
 cd backend && bun --watch index.js
 
 # Frontend only (in separate terminal)
-cd frontend && PORT=3456 BROWSER=none npm start
+cd frontend && PORT=3456 BROWSER=none bun start
 ```
 
 **Access Points:**

@@ -54,7 +54,7 @@ class MCPService {
         name: 'Playwright',
         description: 'Browser automation for testing and scraping',
         command: 'npx',
-        args: ['-y', '@playwright/mcp'],
+        args: ['@playwright/mcp', '--browser', 'chrome'],
         transport: 'stdio',
         envVars: []
       },
@@ -126,6 +126,14 @@ class MCPService {
           { key: 'JIRA_USERNAME', description: 'The username to authenticate with Jira', required: true },
           { key: 'JIRA_API_TOKEN', description: 'The API token to authenticate with Jira', required: true }
         ]
+      },
+      'zen': {
+        name: 'Zen MCP Server',
+        description: 'Multi-model AI server with chat, planning, debugging, and analysis tools (requires local setup)',
+        command: '/Users/danielbeach/.zen-mcp-server/.zen_venv/bin/python',
+        args: ['/Users/danielbeach/.zen-mcp-server/server.py'],
+        transport: 'stdio',
+        envVars: []
       }
     };
   }
@@ -324,19 +332,20 @@ class MCPService {
     }
 
     try {
-      // Build Claude CLI command: claude mcp add --scope user name command args
-      let cliCommand = `claude mcp add --scope ${scope} "${name}" ${command}`;
+      // Build Claude CLI command: claude mcp add --scope user name [env vars] -- command args
+      let cliCommand = `claude mcp add --scope ${scope} "${name}"`;
       
-      // Add args
-      if (args && args.length > 0) {
-        cliCommand += ` ${args.join(' ')}`;
-      }
-      
-      // Add environment variables
+      // Add environment variables BEFORE the -- separator
       if (envVars && Object.keys(envVars).length > 0) {
         for (const [key, value] of Object.entries(envVars)) {
           cliCommand += ` -e ${key}="${value}"`;
         }
+      }
+      
+      // Add the -- separator, then command and args
+      cliCommand += ` -- ${command}`;
+      if (args && args.length > 0) {
+        cliCommand += ` ${args.join(' ')}`;
       }
 
       console.log(`Executing Claude CLI command: ${cliCommand}`);
